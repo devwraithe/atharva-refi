@@ -23,7 +23,7 @@ pub mod atharva_refi {
     ) -> Result<()> {
         create_pool::handler(ctx, org_name, org_pubkey, species_name, species_id)
     }
+    pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
+        deposit::handler(ctx, amount)
+    }
 }
-
-#[derive(Accounts)]
-pub struct Initialize {}

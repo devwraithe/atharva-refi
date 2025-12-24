@@ -12,12 +12,12 @@ pub struct Pool {
     pub species_id: String, // e.g panthera_tigris
     pub status: PoolStatus,
     pub total_funded: u64,
-    pub bump: u8,
+    pub pool_bump: u8,
+    pub vault_bump: u8,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, InitSpace)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, InitSpace, PartialEq)]
 pub enum PoolStatus {
     Inactive,
     Active,
-    Completed,
 }

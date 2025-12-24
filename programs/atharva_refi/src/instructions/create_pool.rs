@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use crate::events::PoolCreated;
 use crate::states::{Pool, PoolStatus};
-use crate::constants::{ADMIN_PUBKEY, POOL_SEED};
+use crate::constants::{ADMIN_PUBKEY, POOL_SEED, VAULT_SEED};
 use crate::errors::ErrorCode;
 
 #[derive(Accounts)]
@@ -21,6 +21,13 @@ pub struct CreatePool<'info> {
         bump,
     )]
     pub pool: Account<'info, Pool>,
+
+    #[account(
+        mut,
+        seeds = [VAULT_SEED.as_bytes(), pool.key().as_ref()],
+        bump,
+    )]
+    pub vault: SystemAccount<'info>,
     
     pub system_program: Program<'info, System>,
 }
@@ -38,9 +45,10 @@ pub fn handler(
     pool.org_name = org_name;
     pool.species_name = species_name.clone();
     pool.species_id = species_id.clone();
-    pool.status = PoolStatus::Inactive;
+    pool.status = PoolStatus::Active;
     pool.total_funded = 0;
-    pool.bump = ctx.bumps.pool;
+    pool.pool_bump = ctx.bumps.pool;
+    pool.vault_bump = ctx.bumps.vault;
 
     emit!(PoolCreated { org_pubkey, species_name, species_id });
 
