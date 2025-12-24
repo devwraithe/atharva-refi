@@ -15,3 +15,9 @@ You can view the User Story document [here](./docs/USER-STORY.md)
 #### 2. Detailed
 
 ![Atharva ReFi Detailed Architecture](./docs/detailed-v1.png)
+
+### Possible Bugs
+
+- ADMIN_PUBKEY is in code, what if an attacker decides to change it to theirs?
+- Make sure species is lowercase to avoid errors
+- Implement checks for all inputs and avoid duplication
