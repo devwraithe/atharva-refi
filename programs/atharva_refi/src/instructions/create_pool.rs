@@ -1,0 +1,48 @@
+use anchor_lang::prelude::*;
+use crate::events::PoolCreated;
+use crate::states::{Pool, PoolStatus};
+use crate::constants::{ADMIN_PUBKEY, POOL_SEED};
+use crate::errors::ErrorCode;
+
+#[derive(Accounts)]
+#[instruction(org_pubkey: Pubkey, species_id: String)]
+pub struct CreatePool<'info> {
+    #[account(
+        mut, 
+        address = ADMIN_PUBKEY @ ErrorCode::Unauthorized
+    )]
+    pub admin: Signer<'info>,
+
+    #[account(
+        init,
+        payer = admin,
+        space = 8 + Pool::INIT_SPACE,
+        seeds = [POOL_SEED.as_bytes(), org_pubkey.as_ref(), species_id.as_bytes()],
+        bump,
+    )]
+    pub pool: Account<'info, Pool>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+pub fn handler(
+    ctx: Context<CreatePool>, 
+    org_name: String, 
+    org_pubkey: Pubkey, 
+    species_name: String,
+    species_id: String
+) -> Result<()> {
+    let pool = &mut ctx.accounts.pool;
+
+    pool.org_pubkey = org_pubkey;
+    pool.org_name = org_name;
+    pool.species_name = species_name.clone();
+    pool.species_id = species_id.clone();
+    pool.status = PoolStatus::Inactive;
+    pool.total_funded = 0;
+    pool.bump = ctx.bumps.pool;
+
+    emit!(PoolCreated { org_pubkey, species_name, species_id });
+
+    Ok(())
+}
