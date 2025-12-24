@@ -26,4 +26,7 @@ pub mod atharva_refi {
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         deposit::handler(ctx, amount)
     }
+    pub fn org_withdraw(ctx: Context<OrgWithdraw>, amount: u64) -> Result<()> {
+        org_withdraw::handler(ctx, amount)
+    }
 }

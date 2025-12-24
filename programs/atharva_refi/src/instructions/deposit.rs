@@ -32,7 +32,7 @@ pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     let pool = &mut ctx.accounts.pool;
     let vault = &ctx.accounts.vault;
 
-    // Verify against depositing into inactive pools
+    // Checks
     require!(amount > 0, ErrorCode::InvalidAmount);
     require!(pool.status == PoolStatus::Active, ErrorCode::PoolNotActive);
     require!(supporter.lamports() >= amount, ErrorCode::InsufficientFunds);
