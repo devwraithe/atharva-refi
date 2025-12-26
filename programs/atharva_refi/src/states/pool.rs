@@ -13,7 +13,8 @@ pub struct Pool {
     pub status: PoolStatus,
     pub total_funded: u64,
     pub pool_bump: u8,
-    pub vault_bump: u8,
+    pub org_vault_bump: u8,
+    pub pool_vault_bump: u8,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, InitSpace, PartialEq)]
