@@ -1,6 +1,6 @@
-use crate::constants::{ADMIN_PUBKEY, POOL_SEED, VAULT_SEED};
+use crate::constants::{ADMIN_PUBKEY, ORG_VAULT_SEED, POOL_SEED};
 use crate::errors::ErrorCode;
-use crate::states::{Pool, PoolStatus};
+use crate::states::Pool;
 use anchor_lang::prelude::*;
 use anchor_lang::system_program::{self, Transfer};
 
@@ -18,10 +18,10 @@ pub struct OrgWithdraw<'info> {
 
     #[account(
         mut,
-        seeds = [VAULT_SEED.as_bytes(), pool.key().as_ref()],
-        bump = pool.vault_bump,
+        seeds = [ORG_VAULT_SEED.as_bytes(), pool.org_pubkey.as_ref()],
+        bump = pool.org_vault_bump,
     )]
-    pub vault: SystemAccount<'info>,
+    pub org_vault: SystemAccount<'info>,
 
     pub system_program: Program<'info, System>,
 }
@@ -29,7 +29,7 @@ pub struct OrgWithdraw<'info> {
 pub fn handler(ctx: Context<OrgWithdraw>, amount: u64) -> Result<()> {
     let organization = &ctx.accounts.organization;
     let pool = &ctx.accounts.pool;
-    let vault = &ctx.accounts.vault;
+    let org_vault = &ctx.accounts.org_vault;
 
     // Checks
     require!(amount > 0, ErrorCode::InvalidAmount);
@@ -37,9 +37,9 @@ pub fn handler(ctx: Context<OrgWithdraw>, amount: u64) -> Result<()> {
 
     let pool_bind = pool.key();
     let seeds = &[
-        VAULT_SEED.as_bytes(),
+        ORG_VAULT_SEED.as_bytes(),
         pool_bind.as_ref(),
-        &[ctx.accounts.pool.vault_bump],
+        &[ctx.accounts.pool.org_vault_bump],
     ];
     let signer_seeds = &[&seeds[..]];
 
@@ -47,7 +47,7 @@ pub fn handler(ctx: Context<OrgWithdraw>, amount: u64) -> Result<()> {
     let cpi_ctx = CpiContext::new_with_signer(
         ctx.accounts.system_program.to_account_info(),
         Transfer {
-            from: vault.to_account_info(),
+            from: org_vault.to_account_info(),
             to: organization.to_account_info(),
         },
         signer_seeds,

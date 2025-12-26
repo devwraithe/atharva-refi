@@ -1,4 +1,4 @@
-use crate::constants::{POOL_SEED, VAULT_SEED};
+use crate::constants::{POOL_SEED, POOL_VAULT_SEED};
 use crate::errors::ErrorCode;
 use crate::events::SupporterDeposited;
 use crate::states::{Pool, PoolStatus};
@@ -19,10 +19,10 @@ pub struct Deposit<'info> {
 
     #[account(
         mut,
-        seeds = [VAULT_SEED.as_bytes(), pool.key().as_ref()],
-        bump = pool.vault_bump,
+        seeds = [POOL_VAULT_SEED.as_bytes(), pool.key().as_ref(), pool.org_pubkey.as_ref()],
+        bump = pool.org_vault_bump,
     )]
-    pub vault: SystemAccount<'info>,
+    pub pool_vault: SystemAccount<'info>,
 
     pub system_program: Program<'info, System>,
 }
@@ -30,7 +30,7 @@ pub struct Deposit<'info> {
 pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     let supporter = &ctx.accounts.supporter;
     let pool = &mut ctx.accounts.pool;
-    let vault = &ctx.accounts.vault;
+    let pool_vault = &ctx.accounts.pool_vault;
 
     // Checks
     require!(amount > 0, ErrorCode::InvalidAmount);
@@ -46,7 +46,7 @@ pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
     // Transfer from supporter to pool vault
     let cpi_accounts = Transfer {
         from: supporter.to_account_info(),
-        to: vault.to_account_info(),
+        to: pool_vault.to_account_info(),
     };
     let cpi_ctx = CpiContext::new(ctx.accounts.system_program.to_account_info(), cpi_accounts);
 
