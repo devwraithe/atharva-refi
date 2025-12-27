@@ -11,14 +11,14 @@ pub struct OrgWithdraw<'info> {
 
     #[account(
         mut,
-        seeds = [POOL_SEED.as_bytes(), pool.org_pubkey.as_ref(), pool.species_id.as_bytes()],
+        seeds = [POOL_SEED.as_bytes(), pool.organization_pubkey.as_ref(), pool.species_id.as_bytes()],
         bump = pool.pool_bump,
     )]
     pub pool: Account<'info, Pool>,
 
     #[account(
         mut,
-        seeds = [ORG_VAULT_SEED.as_bytes(), pool.org_pubkey.as_ref()],
+        seeds = [ORG_VAULT_SEED.as_bytes(), pool.organization_pubkey.as_ref()],
         bump = pool.org_vault_bump,
     )]
     pub org_vault: SystemAccount<'info>,
@@ -33,7 +33,7 @@ pub fn handler(ctx: Context<OrgWithdraw>, amount: u64) -> Result<()> {
 
     // Checks
     require!(amount > 0, ErrorCode::InvalidAmount);
-    require!(pool.total_funded >= amount, ErrorCode::InsufficientFunds);
+    require!(pool.total_deposits >= amount, ErrorCode::InsufficientFunds);
 
     let pool_bind = pool.key();
     let seeds = &[

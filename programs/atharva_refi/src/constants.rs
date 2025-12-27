@@ -1,9 +1,9 @@
 use anchor_lang::prelude::*;
-use solana_program::native_token::LAMPORTS_PER_SOL;
-use anchor_lang::solana_program::*;
+use anchor_lang::solana_program::{native_token::LAMPORTS_PER_SOL, pubkey};
 
 pub const ADMIN_PUBKEY: Pubkey = pubkey!("11111111111111111111111111111111");
 pub const POOL_SEED: &str = "pool";
+pub const POOL_MINT_SEED: &str = "pool_mint";
 pub const ORG_VAULT_SEED: &str = "org_vault";
 pub const POOL_VAULT_SEED: &str = "pool_vault";
 
