@@ -5,6 +5,7 @@ mod errors;
 mod events;
 mod instructions;
 mod states;
+mod utilities;
 
 use instructions::*;
 
@@ -28,5 +29,11 @@ pub mod atharva_refi {
     }
     pub fn org_withdraw(ctx: Context<OrgWithdraw>, amount: u64) -> Result<()> {
         org_withdraw::handler(ctx, amount)
+    }
+    pub fn stake(ctx: Context<Stake>, amount: u64) -> Result<()> {
+        ctx.accounts.handler(amount)
+    }
+    pub fn unstake(ctx: Context<LiquidUnstake>, amount: u64) -> Result<()> {
+        ctx.accounts.process(amount)
     }
 }

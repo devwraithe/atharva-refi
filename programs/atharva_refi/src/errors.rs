@@ -12,4 +12,8 @@ pub enum ErrorCode {
     InsufficientFunds,
     #[msg("Invalid amount")]
     InvalidAmount,
+    #[msg("Amount is too small")]
+    AmountTooSmall,
+    #[msg("Unmatched Program Key")]
+    MarinadeProgramError,
 }

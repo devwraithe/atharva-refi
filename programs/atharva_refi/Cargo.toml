@@ -18,11 +18,12 @@ idl-build = ["anchor-lang/idl-build"]
 anchor-debug = []
 custom-heap = []
 custom-panic = []
+with-marinade = []
 
 
 [dependencies]
-anchor-lang = "0.32.1"
-
+anchor-lang = {version = "0.32.1", features = ["idl-build", "init-if-needed"] }
+anchor-spl = { version = "0.32.1", features = ["idl-build"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
