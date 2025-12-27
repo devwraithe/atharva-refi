@@ -17,15 +17,21 @@ pub mod atharva_refi {
 
     pub fn create_pool(
         ctx: Context<CreatePool>,
-        org_name: String,
-        org_pubkey: Pubkey,
+        organization_name: String,
+        organization_pubkey: Pubkey,
         species_name: String,
         species_id: String,
     ) -> Result<()> {
-        create_pool::handler(ctx, org_name, org_pubkey, species_name, species_id)
+        ctx.accounts.process(
+            organization_name,
+            organization_pubkey,
+            species_name,
+            species_id,
+            &ctx.bumps,
+        )
     }
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
-        deposit::handler(ctx, amount)
+        ctx.accounts.process(amount)
     }
     pub fn org_withdraw(ctx: Context<OrgWithdraw>, amount: u64) -> Result<()> {
         org_withdraw::handler(ctx, amount)

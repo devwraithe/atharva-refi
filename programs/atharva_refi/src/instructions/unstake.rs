@@ -1,12 +1,10 @@
 use crate::constants::MARINADE_FINANCE;
 use crate::errors::ErrorCode;
 use crate::utilities::calculate_ix_discriminator;
-use anchor_lang::prelude::program::invoke;
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::{
-    instruction::{AccountMeta, Instruction},
-    system_program,
-};
+use anchor_lang::solana_program::instruction::{AccountMeta, Instruction};
+use anchor_lang::solana_program::program::invoke;
+use anchor_lang::solana_program::system_program;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
 #[derive(Accounts)]

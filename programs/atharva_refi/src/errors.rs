@@ -16,4 +16,8 @@ pub enum ErrorCode {
     AmountTooSmall,
     #[msg("Unmatched Program Key")]
     MarinadeProgramError,
+    #[msg("String too long")]
+    StringTooLong,
+    #[msg("Invalid input")]
+    InvalidInput,
 }
