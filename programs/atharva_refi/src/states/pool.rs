@@ -7,18 +7,26 @@ pub struct Pool {
     #[max_len(50)]
     pub organization_name: String,
 
+    /// DECISION: Store as percentage (20 = 20%)
+    /// This is converted to basis points in calculations
+    pub organization_yield_bps: u8,
+
     #[max_len(50)]
-    pub species_name: String, // e.g Tiger
+    pub species_name: String,
     #[max_len(50)]
-    pub species_id: String, // e.g panthera_tigris
+    pub species_id: String,
 
     pub vault: Pubkey,
     pub pool_mint: Pubkey,
+
+    pub last_settled_vault_sol: u64,
+    pub last_settlement_ts: u64,
 
     pub total_deposits: u64,
     pub total_shares: u64,
 
     pub is_active: bool,
+    pub is_crank_scheduled: bool, // Track if crank is active
 
     pub pool_bump: u8,
     pub org_vault_bump: u8,

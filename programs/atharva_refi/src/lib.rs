@@ -1,5 +1,7 @@
+#![allow(deprecated, unexpected_cfgs)]
 use anchor_lang::prelude::*;
 
+mod actions;
 mod constants;
 mod errors;
 mod events;
@@ -8,6 +10,7 @@ mod states;
 mod utilities;
 
 use instructions::*;
+use states::ScheduleStreamArgs;
 
 declare_id!("HesZ7kke1KynNjhizTAAtRoxQZasxYqJ2oTrdw7JNkBx");
 
@@ -41,5 +44,11 @@ pub mod atharva_refi {
     }
     pub fn unstake(ctx: Context<LiquidUnstake>, amount: u64) -> Result<()> {
         ctx.accounts.process(amount)
+    }
+    pub fn stream_yields(ctx: Context<StreamYields>) -> Result<()> {
+        ctx.accounts.process()
+    }
+    pub fn schedule_streams(ctx: Context<ScheduleStreams>, args: ScheduleStreamArgs) -> Result<()> {
+        ctx.accounts.process(args)
     }
 }
