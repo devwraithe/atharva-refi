@@ -23,3 +23,13 @@ pub struct YieldStreamed {
     pub pool_amount: u64,
     pub timestamp: u64,
 }
+
+#[event]
+pub struct SupporterWithdrew {
+    pub supporter: Pubkey,
+    pub pool: Pubkey,
+    pub share_amount: u64,
+    pub msol_amount: u64,
+    pub sol_amount: u64,
+    pub timestamp: u64,
+}

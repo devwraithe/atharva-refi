@@ -51,4 +51,7 @@ pub mod atharva_refi {
     pub fn schedule_streams(ctx: Context<ScheduleStreams>, args: ScheduleStreamArgs) -> Result<()> {
         ctx.accounts.process(args)
     }
+    pub fn supporter_withdraw(ctx: Context<Withdraw>, share_amount: u64) -> Result<()> {
+        ctx.accounts.process(share_amount)
+    }
 }
