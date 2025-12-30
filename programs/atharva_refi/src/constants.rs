@@ -10,22 +10,13 @@ pub const POOL_VAULT_SEED: &str = "pool_vault";
 // Marinade Finance Program ID
 pub const MARINADE_FINANCE: Pubkey = pubkey!("MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD");
 
-// Key Marinade accounts (mainnet)
-pub const MARINADE_STATE: Pubkey = pubkey!("8szGkuLTAux9XMgZ2vtY39jVSowEcpBfFfD8hXSEqdGC");
-pub const MSOL_MINT: Pubkey = pubkey!("mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So");
+pub mod marinade_finance {
+    use anchor_lang::prelude::*;
 
-// Marinade Finance
-pub const MARINADE_FINANCE_PROGRAM: &str = "MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD"; // Mainnet Program ID
-
-///Base % cut for the partner
-pub const DEFAULT_BASE_FEE_POINTS: u32 = 1_000; // 10%
-
-///Max % cut for the partner
-pub const DEFAULT_MAX_FEE_POINTS: u32 = 10_000; // 100%
-
-pub const DEFAULT_OPERATION_FEE_POINTS: u8 = 0; // 0%
-pub const MAX_OPERATION_FEE_POINTS: u8 = 50; // 0.5%
-
-pub const DEFAULT_MAX_NET_STAKE: u64 = 1_000_000_u64
-    .checked_mul(LAMPORTS_PER_SOL)
-    .expect("Overflow calculating constant");
+    pub const PROGRAM_ID: Pubkey = pubkey!("MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD");
+    pub const STATE: Pubkey = pubkey!("8szGkuLTAux9XMgZ2vtY39jVSowEcpBfFfD8hXSEqdGC");
+    pub const MSOL_MINT: Pubkey = pubkey!("mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So");
+    pub const LIQ_POOL_SOL_LEG: Pubkey = pubkey!("UefNb6z6yvArqe4cJHTXCqStRsKmWhGxnZzuHbikP5Q");
+    pub const LIQ_POOL_MSOL_LEG: Pubkey = pubkey!("7GgPYjS5Dza89wV6FpZ23kUJRG5vbQ1GM25ezspYFSoE");
+    pub const TREASURY_MSOL: Pubkey = pubkey!("Du3Ysj1wKbxPKkuPPnvzQLQh8oMSVifs3jGZjJWXFmHN");
+}

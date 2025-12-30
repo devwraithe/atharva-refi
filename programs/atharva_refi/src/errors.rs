@@ -20,4 +20,33 @@ pub enum ErrorCode {
     StringTooLong,
     #[msg("Invalid input")]
     InvalidInput,
+    #[msg("Settlement can only occur once per day")]
+    SettlementTooFrequent,
+
+    #[msg("Yield amount too small to settle")]
+    YieldTooSmall,
+
+    #[msg("Invalid yield percentage")]
+    InvalidYieldPercentage,
+
+    #[msg("Invalid Marinade state account")]
+    InvalidMarinadeState,
+
+    #[msg("Invalid mSOL account")]
+    InvalidMsolAccount,
+
+    #[msg("Invalid mSOL mint")]
+    InvalidMsolMint,
+
+    #[msg("Invalid Magic Program")]
+    InvalidMagicProgram,
+
+    #[msg("Execution interval too short (minimum 1 day)")]
+    IntervalTooShort,
+
+    #[msg("Invalid iterations count")]
+    InvalidIterations,
+
+    #[msg("Serialization error")]
+    SerializationError,
 }

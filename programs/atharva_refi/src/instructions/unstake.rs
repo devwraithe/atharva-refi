@@ -1,3 +1,4 @@
+use crate::actions::{marinade_liquid_unstake, MarinadeLiquidUnstakeAccounts};
 use crate::constants::MARINADE_FINANCE;
 use crate::errors::ErrorCode;
 use crate::utilities::calculate_ix_discriminator;
@@ -45,47 +46,22 @@ impl<'info> LiquidUnstake<'info> {
 
         require!(msol_amount > 0, ErrorCode::AmountTooSmall);
 
-        // Marinade "LiquidUnstake" instruction discriminator
-        let mut instruction_data = calculate_ix_discriminator("liquid_unstake");
-        instruction_data.extend_from_slice(&msol_amount.to_le_bytes());
-
-        // Build account metas for Marinade's liquid_unstake instruction
-        let accounts = vec![
-            AccountMeta::new(self.marinade_state.key(), false),
-            AccountMeta::new(self.msol_mint.key(), false),
-            AccountMeta::new(self.liq_pool_sol_leg.key(), false),
-            AccountMeta::new(self.liq_pool_msol_leg.key(), false),
-            AccountMeta::new(self.treasury_msol_account.key(), false),
-            AccountMeta::new(self.user_msol_account.key(), false),
-            AccountMeta::new_readonly(self.user.key(), true),
-            AccountMeta::new(self.user.key(), false), // receives SOL
-            AccountMeta::new_readonly(system_program::ID, false),
-            AccountMeta::new_readonly(anchor_spl::token::ID, false),
-        ];
-
-        // Create the instruction
-        let liquid_unstake_ix = Instruction {
-            program_id: MARINADE_FINANCE,
-            accounts,
-            data: instruction_data,
-        };
-
-        // Invoke CPI
-        invoke(
-            &liquid_unstake_ix,
-            &[
-                self.marinade_state.to_account_info(),
-                self.msol_mint.to_account_info(),
-                self.liq_pool_sol_leg.to_account_info(),
-                self.liq_pool_msol_leg.to_account_info(),
-                self.treasury_msol_account.to_account_info(),
-                self.user_msol_account.to_account_info(),
-                self.user.to_account_info(),
-                self.user.to_account_info(),
-                self.system_program.to_account_info(),
-                self.token_program.to_account_info(),
-            ],
-        )?;
+        marinade_liquid_unstake(
+            msol_amount,
+            MarinadeLiquidUnstakeAccounts {
+                marinade_state: self.marinade_state.to_account_info(),
+                msol_mint: self.msol_mint.to_account_info(),
+                liq_pool_sol_leg: self.liq_pool_sol_leg.to_account_info(),
+                liq_pool_msol_leg: self.liq_pool_msol_leg.to_account_info(),
+                treasury_msol_account: self.treasury_msol_account.to_account_info(),
+                burn_msol_from: self.user_msol_account.to_account_info(),
+                burn_msol_authority: self.user.to_account_info(),
+                sol_receiver: self.user.to_account_info(),
+                system_program: self.system_program.to_account_info(),
+                token_program: self.token_program.to_account_info(),
+            },
+            None, // user signs directly
+        );
 
         msg!("Successfully unstaked {} mSOL for SOL", msol_amount);
 
