@@ -49,4 +49,13 @@ pub enum ErrorCode {
 
     #[msg("Serialization error")]
     SerializationError,
+
+    #[msg("Insufficient shares to withdraw")]
+    InsufficientShares,
+
+    #[msg("Pool is empty")]
+    PoolEmpty,
+
+    #[msg("Invalid token account")]
+    InvalidTokenAccount,
 }
