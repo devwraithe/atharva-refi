@@ -1,28 +1,27 @@
-use crate::constants::MARINADE_FINANCE;
+use crate::constants::MARINADE_PROGRAM_ID;
 use crate::utilities::calculate_ix_discriminator;
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::{
     instruction::{AccountMeta, Instruction},
     program::{invoke, invoke_signed},
-    system_program,
 };
 
-pub struct MarinadeLiquidUnstakeAccounts<'info> {
+pub struct LiquidUnstakeAccounts<'info> {
     pub marinade_state: AccountInfo<'info>,
     pub msol_mint: AccountInfo<'info>,
     pub liq_pool_sol_leg: AccountInfo<'info>,
     pub liq_pool_msol_leg: AccountInfo<'info>,
     pub treasury_msol_account: AccountInfo<'info>,
-    pub burn_msol_from: AccountInfo<'info>,
-    pub burn_msol_authority: AccountInfo<'info>,
-    pub sol_receiver: AccountInfo<'info>,
+    pub get_msol_from: AccountInfo<'info>,
+    pub get_msol_from_authority: AccountInfo<'info>,
+    pub transfer_sol_to: AccountInfo<'info>,
     pub system_program: AccountInfo<'info>,
     pub token_program: AccountInfo<'info>,
 }
 
 pub fn marinade_liquid_unstake<'info>(
     msol_amount: u64,
-    accounts: MarinadeLiquidUnstakeAccounts<'info>,
+    accounts: LiquidUnstakeAccounts<'info>,
     signer_seeds: Option<&[&[&[u8]]]>,
 ) -> Result<()> {
     require!(msol_amount > 0, crate::errors::ErrorCode::AmountTooSmall);
@@ -37,15 +36,15 @@ pub fn marinade_liquid_unstake<'info>(
         AccountMeta::new(accounts.liq_pool_sol_leg.key(), false),
         AccountMeta::new(accounts.liq_pool_msol_leg.key(), false),
         AccountMeta::new(accounts.treasury_msol_account.key(), false),
-        AccountMeta::new(accounts.burn_msol_from.key(), false),
-        AccountMeta::new_readonly(accounts.burn_msol_authority.key(), true),
-        AccountMeta::new(accounts.sol_receiver.key(), false),
-        AccountMeta::new_readonly(system_program::ID, false),
-        AccountMeta::new_readonly(anchor_spl::token::ID, false),
+        AccountMeta::new(accounts.get_msol_from.key(), false),
+        AccountMeta::new_readonly(accounts.get_msol_from_authority.key(), true),
+        AccountMeta::new(accounts.transfer_sol_to.key(), false),
+        AccountMeta::new_readonly(accounts.system_program.key(), false),
+        AccountMeta::new_readonly(accounts.token_program.key(), false),
     ];
 
     let ix = Instruction {
-        program_id: MARINADE_FINANCE,
+        program_id: MARINADE_PROGRAM_ID,
         accounts: metas,
         data,
     };
@@ -56,9 +55,9 @@ pub fn marinade_liquid_unstake<'info>(
         accounts.liq_pool_sol_leg,
         accounts.liq_pool_msol_leg,
         accounts.treasury_msol_account,
-        accounts.burn_msol_from,
-        accounts.burn_msol_authority,
-        accounts.sol_receiver,
+        accounts.get_msol_from,
+        accounts.get_msol_from_authority,
+        accounts.transfer_sol_to,
         accounts.system_program,
         accounts.token_program,
     ];

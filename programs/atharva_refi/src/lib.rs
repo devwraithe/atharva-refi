@@ -1,11 +1,11 @@
 #![allow(deprecated, unexpected_cfgs)]
 use anchor_lang::prelude::*;
 
-mod actions;
 mod constants;
 mod errors;
 mod events;
 mod instructions;
+mod marinade;
 mod states;
 mod utilities;
 
@@ -36,22 +36,22 @@ pub mod atharva_refi {
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         ctx.accounts.process(amount)
     }
-    pub fn org_withdraw(ctx: Context<OrgWithdraw>, amount: u64) -> Result<()> {
-        org_withdraw::handler(ctx, amount)
-    }
     pub fn stake(ctx: Context<Stake>, amount: u64) -> Result<()> {
-        ctx.accounts.handler(amount)
-    }
-    pub fn unstake(ctx: Context<LiquidUnstake>, amount: u64) -> Result<()> {
         ctx.accounts.process(amount)
     }
-    pub fn stream_yields(ctx: Context<StreamYields>) -> Result<()> {
+    pub fn stream(ctx: Context<Stream>) -> Result<()> {
         ctx.accounts.process()
     }
-    pub fn schedule_streams(ctx: Context<ScheduleStreams>, args: ScheduleStreamArgs) -> Result<()> {
+    pub fn schedule_streams(ctx: Context<ScheduleStream>, args: ScheduleStreamArgs) -> Result<()> {
         ctx.accounts.process(args)
+    }
+    pub fn unstake(ctx: Context<Unstake>, amount: u64) -> Result<()> {
+        ctx.accounts.process(amount)
     }
     pub fn supporter_withdraw(ctx: Context<Withdraw>, share_amount: u64) -> Result<()> {
         ctx.accounts.process(share_amount)
+    }
+    pub fn organization_withdraw(ctx: Context<OrganizationWithdraw>, amount: u64) -> Result<()> {
+        ctx.accounts.process(amount)
     }
 }

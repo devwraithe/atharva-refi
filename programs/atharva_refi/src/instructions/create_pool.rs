@@ -4,12 +4,19 @@ use crate::events::PoolCreated;
 use crate::states::Pool;
 use anchor_lang::prelude::*;
 
+/// Creates a conservation pool for a specific species under an organization
+///
+/// Architecture:
+/// - One pool per (organization, species) pair
+/// - Each pool has isolated vault for deposits
+/// - Organization has isolated vault for yield collection
+
 #[derive(Accounts)]
 #[instruction(organization_pubkey: Pubkey, species_id: String)]
 pub struct CreatePool<'info> {
     #[account(
         mut,
-        address = ADMIN_PUBKEY @ ErrorCode::Unauthorized
+        address = ADMIN_PUBKEY @ ErrorCode::CreatePoolUnauthorized
     )]
     pub admin: Signer<'info>,
 
@@ -23,22 +30,19 @@ pub struct CreatePool<'info> {
     pub pool: Account<'info, Pool>,
 
     #[account(
-        mut,
-        seeds = [POOL_VAULT_SEED.as_bytes(), pool.key().as_ref(), organization_pubkey.as_ref()],
+        seeds = [POOL_VAULT_SEED.as_bytes(), organization_pubkey.as_ref(), species_id.as_bytes()],
         bump,
     )]
     pub pool_vault: SystemAccount<'info>,
 
     #[account(
-        mut,
-        seeds = [ORG_VAULT_SEED.as_bytes(), organization_pubkey.as_ref()],
+        seeds = [ORG_VAULT_SEED.as_bytes(), organization_pubkey.as_ref(), species_id.as_bytes()],
         bump,
     )]
-    pub org_vault: SystemAccount<'info>,
+    pub organization_vault: SystemAccount<'info>,
 
     pub system_program: Program<'info, System>,
 }
-
 impl<'info> CreatePool<'info> {
     pub fn process(
         &mut self,
@@ -48,36 +52,49 @@ impl<'info> CreatePool<'info> {
         species_id: String,
         bumps: &CreatePoolBumps,
     ) -> Result<()> {
-        // Verify checks
-        require!(organization_name.len() <= 50, ErrorCode::StringTooLong);
-        require!(species_name.len() <= 50, ErrorCode::StringTooLong);
-        require!(species_id.len() <= 20, ErrorCode::StringTooLong);
+        // Validation
         require!(
-            !organization_name.is_empty() && !species_name.is_empty() && !species_id.is_empty(),
-            ErrorCode::InvalidInput
+            organization_name.len() > 0 && organization_name.len() <= 50,
+            ErrorCode::InvalidStringLength
+        );
+        require!(
+            species_name.len() > 0 && species_name.len() <= 50,
+            ErrorCode::InvalidStringLength
+        );
+        require!(
+            species_id.len() > 0 && species_id.len() <= 20,
+            ErrorCode::InvalidStringLength
         );
 
-        // Initialize pool
         let pool = &mut self.pool;
 
+        // Initialize state
         pool.organization_pubkey = organization_pubkey;
-        pool.organization_name = organization_name;
+        pool.organization_name = organization_name.clone();
+        pool.organization_yield_bps = 20; // 20% to organizations, 80% to supporters
         pool.species_name = species_name.clone();
         pool.species_id = species_id.clone();
 
         pool.is_active = true;
+        pool.is_crank_scheduled = false;
         pool.total_deposits = 0;
         pool.total_shares = 0;
+        pool.last_streamed_vault_sol = 0;
+        pool.last_stream_ts = 0;
 
+        // Store bumps for CPI calls
         pool.pool_bump = bumps.pool;
-        pool.org_vault_bump = bumps.org_vault;
+        pool.org_vault_bump = bumps.organization_vault;
         pool.pool_vault_bump = bumps.pool_vault;
 
-        // Emit events
+        // Emit event
         emit!(PoolCreated {
+            pool: pool.key(),
             organization_pubkey,
+            organization_name,
             species_name,
             species_id,
+            timestamp: Clock::get()?.unix_timestamp as u64,
         });
 
         Ok(())
