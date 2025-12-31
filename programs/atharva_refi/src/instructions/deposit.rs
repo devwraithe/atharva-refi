@@ -7,6 +7,8 @@ use anchor_lang::system_program::{self, Transfer};
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInterface};
 
+/// Deposits to pool vault and mints reciept tokens to supporter
+
 #[derive(Accounts)]
 pub struct Deposit<'info> {
     #[account(mut)]
@@ -20,16 +22,25 @@ pub struct Deposit<'info> {
     pub pool: Account<'info, Pool>,
 
     #[account(
-        mut,
-        seeds = [POOL_MINT_SEED.as_bytes(), pool.organization_pubkey.as_ref(), pool.species_id.as_bytes()],
+        mint::authority = pool,
+        mint::token_program = token_program,
+        seeds = [
+            POOL_MINT_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            pool.species_id.as_bytes()
+        ],
         bump,
     )]
     pub pool_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
         mut,
-        seeds = [POOL_VAULT_SEED.as_bytes(), pool.key().as_ref(), pool.organization_pubkey.as_ref()],
-        bump = pool.org_vault_bump,
+        seeds = [
+            POOL_VAULT_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            pool.species_id.as_bytes()
+        ],
+        bump,
     )]
     pub pool_vault: SystemAccount<'info>,
 
@@ -43,34 +54,32 @@ pub struct Deposit<'info> {
     pub supporter_pool_token_account: InterfaceAccount<'info, TokenAccount>,
 
     pub token_program: Interface<'info, TokenInterface>,
+
     pub associated_token_program: Program<'info, AssociatedToken>,
+
     pub system_program: Program<'info, System>,
 }
 
 impl<'info> Deposit<'info> {
     pub fn process(&mut self, amount: u64) -> Result<()> {
-        // Verify checks
+        // Validation
         require!(amount > 0, ErrorCode::InvalidAmount);
         require!(self.pool.is_active, ErrorCode::PoolNotActive);
-        require!(
-            self.supporter.lamports() >= amount,
-            ErrorCode::InsufficientFunds
-        );
 
-        // Update states
-        self.pool.pool_mint = self.pool_mint.key();
-        self.pool.total_deposits = self
-            .pool
+        let pool = &mut self.pool;
+
+        // Update state
+        pool.pool_mint = self.pool_mint.key();
+        pool.total_deposits = pool
             .total_deposits
             .checked_add(amount)
             .ok_or(ErrorCode::MathError)?;
-        self.pool.total_shares = self
-            .pool
+        pool.total_shares = pool
             .total_shares
             .checked_add(amount)
             .ok_or(ErrorCode::MathError)?;
 
-        // Transfer
+        // Transfer from supporter to pool vault
         let transfer_cpi_accounts = Transfer {
             from: self.supporter.to_account_info(),
             to: self.pool_vault.to_account_info(),
@@ -81,13 +90,13 @@ impl<'info> Deposit<'info> {
 
         system_program::transfer(transfer_cpi_ctx, amount)?;
 
-        // Minting
-        let pool_key = self.pool.key();
+        // Mint receipt tokens for supporter
+        let pool_key = pool.key();
         let vault_seeds = &[
             POOL_VAULT_SEED.as_bytes(),
             pool_key.as_ref(),
-            self.pool.organization_pubkey.as_ref(),
-            &[self.pool.org_vault_bump],
+            pool.organization_pubkey.as_ref(),
+            &[pool.org_vault_bump],
         ];
 
         let signer_seeds = &[&vault_seeds[..]];
@@ -95,7 +104,7 @@ impl<'info> Deposit<'info> {
         let mint_cpi_accounts = MintTo {
             mint: self.pool_mint.to_account_info(),
             to: self.supporter_pool_token_account.to_account_info(),
-            authority: self.pool_vault.to_account_info(),
+            authority: pool.to_account_info(),
         };
 
         let mint_cpi_ctx = CpiContext::new_with_signer(

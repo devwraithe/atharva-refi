@@ -2,9 +2,12 @@ use anchor_lang::prelude::*;
 
 #[event]
 pub struct PoolCreated {
+    pub pool: Pubkey,
     pub organization_pubkey: Pubkey,
+    pub organization_name: String,
     pub species_name: String,
     pub species_id: String,
+    pub timestamp: u64,
 }
 
 #[event]

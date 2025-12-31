@@ -1,6 +1,4 @@
-use anchor_lang::{prelude::*, solana_program::hash};
-
-use crate::constants::POOL_VAULT_SEED;
+use anchor_lang::solana_program::hash;
 
 pub fn calculate_ix_discriminator(ix_name: &str) -> Vec<u8> {
     // "global:" prefix for instructions

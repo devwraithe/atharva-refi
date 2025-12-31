@@ -7,8 +7,8 @@ pub struct Pool {
     #[max_len(50)]
     pub organization_name: String,
 
-    /// DECISION: Store as percentage (20 = 20%)
-    /// This is converted to basis points in calculations
+    /// Store as percentage (20 = 20%)
+    /// Converted to basis points (bps) in calculations
     pub organization_yield_bps: u8,
 
     #[max_len(50)]
@@ -19,8 +19,8 @@ pub struct Pool {
     pub vault: Pubkey,
     pub pool_mint: Pubkey,
 
-    pub last_settled_vault_sol: u64,
-    pub last_settlement_ts: u64,
+    pub last_streamed_vault_sol: u64,
+    pub last_stream_ts: u64,
 
     pub total_deposits: u64,
     pub total_shares: u64,

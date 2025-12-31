@@ -22,8 +22,22 @@ You can view the User Story document [here](./docs/USER-STORY.md)
 - Make sure species is lowercase to avoid errors
 - Implement checks for all inputs and avoid duplication
 - Is it not better to update any state before transactions to prevent reentrancy?
+- Make sure orgs can only withdraw to the wallet they submitted during pool creation to prevent fraud.
+- Add validation constraints to accounts e.g: #[account(
+  mut,
+  constraint = pool_msol_account.mint == msol_mint.key() @ ErrorCode::InvalidMsolAccount,
+  constraint = pool_msol_account.owner == pool_vault.key() @ ErrorCode::InvalidMsolAccount,
+  )]
+  pub pool_msol_account: InterfaceAccount<'info, TokenAccount>,
+- Switch to using TokenInterface for marinade accounts (uncertain but worth a shot)
+
+# Constraints
+
+- (address = marinade_finance::STATE @ ErrorCode::InvalidMarinadeState),
+- token::mint = msol_mint, token::authority = pool_vault,
 
 ### To Do
+
 - Slippage protection
 
 ### Possible Useful Notes
