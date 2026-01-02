@@ -1,5 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
-import idl from "../../target/idl/atharva_refi.json";
+import idl from "../target/idl/atharva_refi.json";
 
 export const POOL_SEED = "pool";
 export const POOL_VAULT_SEED = "pool_vault";

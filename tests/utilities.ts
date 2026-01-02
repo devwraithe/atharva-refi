@@ -5,7 +5,7 @@ import {
   POOL_VAULT_SEED,
   ORG_VAULT_SEED,
   walletPath,
-} from "./utilities/constants";
+} from "./constants";
 import fs from "fs";
 
 export function getOrCreateAdminWallet(): Keypair {
