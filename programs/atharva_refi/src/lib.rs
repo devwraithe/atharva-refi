@@ -23,7 +23,7 @@ pub mod atharva_refi {
         organization_name: String,
         organization_pubkey: Pubkey,
         species_name: String,
-        species_id: String,
+        species_id: [u8; 32],
     ) -> Result<()> {
         ctx.accounts.process(
             organization_name,
