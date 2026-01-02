@@ -6,8 +6,89 @@ import {
   ORG_VAULT_SEED,
   walletPath,
   POOL_MINT_SEED,
+  LIQ_POOL_MSOL_LEG,
+  LIQ_POOL_SOL_LEG,
+  M_PROGRAM_ID,
+  M_STATE,
+  MSOL_LEG_AUTH,
+  MSOL_MINT,
+  MSOL_MINT_AUTH,
+  RESERVE_PDA,
 } from "./constants";
 import fs from "fs";
+import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+
+// Load external account
+
+export function loadAccount(
+  svm: any,
+  address: PublicKey,
+  filePath: string,
+  owner: PublicKey
+) {
+  try {
+    const content = fs.readFileSync(filePath, "utf8");
+
+    // Check if file is empty
+    if (!content || content.trim().length === 0) {
+      throw new Error(`File is empty: ${filePath}`);
+    }
+
+    const data = JSON.parse(content);
+
+    svm.setAccount(address, {
+      lamports: data.account.lamports,
+      data: Buffer.from(data.account.data[0], "base64"),
+      owner: owner,
+      executable: false,
+    });
+  } catch (error) {
+    console.error(`❌ Failed to load account from ${filePath}`);
+    throw error; // Re-throw to stop the test
+  }
+}
+
+/**
+ * Centralized loader for Marinade-related accounts in LiteSVM
+ */
+export function loadMarinadeAccounts(svm: any, marinadePath: string) {
+  // Mapping of constant addresses to their specific filenames and owners
+  const marinadeAccounts = [
+    { address: M_STATE, file: "marinade_state.json", owner: M_PROGRAM_ID },
+    { address: MSOL_MINT, file: "msol_mint.json", owner: TOKEN_PROGRAM_ID },
+    {
+      address: RESERVE_PDA,
+      file: "reserve_pda.json",
+      owner: SystemProgram.programId,
+    },
+    {
+      address: MSOL_MINT_AUTH,
+      file: "msol_mint_auth.json",
+      owner: M_PROGRAM_ID,
+    },
+    {
+      address: LIQ_POOL_SOL_LEG,
+      file: "liq_pool_sol_leg.json",
+      owner: SystemProgram.programId,
+    },
+    {
+      address: LIQ_POOL_MSOL_LEG,
+      file: "liq_pool_msol_leg.json",
+      owner: TOKEN_PROGRAM_ID,
+    },
+    { address: MSOL_LEG_AUTH, file: "msol_leg_auth.json", owner: M_PROGRAM_ID },
+  ];
+
+  // Load the program bytecode first
+  svm.addProgram(M_PROGRAM_ID, fs.readFileSync(`${marinadePath}/marinade.so`));
+
+  // Iterate and load each account state
+  for (const acc of marinadeAccounts) {
+    loadAccount(svm, acc.address, `${marinadePath}/${acc.file}`, acc.owner);
+  }
+
+  console.log("✅ All Marinade accounts loaded into LiteSVM");
+}
 
 export function getOrCreateAdminWallet(): Keypair {
   if (fs.existsSync(walletPath)) {

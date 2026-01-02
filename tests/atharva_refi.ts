@@ -12,12 +12,26 @@ import {
   bytesToString,
   getOrCreateAdminWallet,
   getPoolPdas,
+  loadAccount,
+  loadMarinadeAccounts,
   stringToBytes,
 } from "./utilities";
 import { expect } from "chai";
 import { TOKEN_PROGRAM_ID } from "@coral-xyz/anchor/dist/cjs/utils/token";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import {
+  LIQ_POOL_MSOL_LEG,
+  LIQ_POOL_SOL_LEG,
+  M_PROGRAM_ID,
+  M_STATE,
+  marinadePath,
+  MSOL_LEG_AUTH,
+  MSOL_MINT,
+  MSOL_MINT_AUTH,
+  RESERVE_PDA,
+} from "./constants";
+import fs from "fs";
 
 describe("Atharva ReFi Tests", () => {
   const svm = fromWorkspace("./");
@@ -39,6 +53,13 @@ describe("Atharva ReFi Tests", () => {
     // Initialize provider and program
     provider = new LiteSVMProvider(svm);
     program = new Program<AtharvaRefi>(idl, provider);
+
+    // Load Marinade Accounts
+    const marinadeSo = fs.readFileSync("tests/marinade/marinade.so");
+    svm.addProgram(M_PROGRAM_ID, marinadeSo);
+
+    // Initialize all Marinade dependencies with one call
+    loadMarinadeAccounts(svm, marinadePath);
 
     // Generate keypairs
     admin = getOrCreateAdminWallet();
@@ -260,6 +281,56 @@ describe("Atharva ReFi Tests", () => {
       } catch (error) {
         console.log("✅ Correctly rejected zero deposit");
       }
+    });
+  });
+
+  describe("Stake", () => {
+    it("stakes 2 SOL on Marinade Finance", async () => {
+      const speciesIdBytes = stringToBytes(speciesId, 32);
+      const { poolPda, poolVaultPda } = getPoolPdas(
+        organization.publicKey,
+        speciesIdBytes
+      );
+
+      // Amount to stake (e.g., 2 SOL)
+      const stakeAmount = new BN(2 * LAMPORTS_PER_SOL);
+
+      // 1. Derive mSOL ATA for the Pool Vault
+      const poolMsolAccount = getAssociatedTokenAddressSync(
+        MSOL_MINT,
+        poolVaultPda,
+        true // allowOwnerOffCurve because poolVaultPda is a PDA
+      );
+
+      console.log("Pool MSOL", poolMsolAccount);
+
+      // 2. Execute Stake
+      await program.methods
+        .stake(stakeAmount)
+        .accountsStrict({
+          pool: poolPda,
+          signer: admin.publicKey,
+          marinadeState: M_STATE,
+          msolMint: MSOL_MINT,
+          liqPoolSolLeg: LIQ_POOL_SOL_LEG,
+          liqPoolMsolLeg: LIQ_POOL_MSOL_LEG,
+          liqPoolMsolLegAuthority: MSOL_LEG_AUTH,
+          reservePda: RESERVE_PDA,
+          poolVault: poolVaultPda,
+          poolMsolAccount: poolMsolAccount, // This must be an ATA
+          msolMintAuthority: MSOL_MINT_AUTH,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, // Added
+          systemProgram: SystemProgram.programId,
+          marinadeProgram: M_PROGRAM_ID,
+        })
+        .signers([admin])
+        .rpc();
+
+      console.log("✅ Staking successful");
+
+      const msolBalance = svm.getAccount(poolMsolAccount).lamports;
+      console.log("   mSOL received:", Number(msolBalance) / LAMPORTS_PER_SOL);
     });
   });
 });
