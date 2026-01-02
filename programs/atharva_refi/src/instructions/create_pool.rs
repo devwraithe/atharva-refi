@@ -1,8 +1,9 @@
-use crate::constants::{ADMIN_PUBKEY, ORG_VAULT_SEED, POOL_SEED, POOL_VAULT_SEED};
+use crate::constants::{ADMIN_PUBKEY, ORG_VAULT_SEED, POOL_MINT_SEED, POOL_SEED, POOL_VAULT_SEED};
 use crate::errors::ErrorCode;
 use crate::events::PoolCreated;
 use crate::states::Pool;
 use anchor_lang::prelude::*;
+use anchor_spl::token::{Mint, Token};
 
 /// Creates a conservation pool for a specific species under an organization
 ///
@@ -29,10 +30,29 @@ pub struct CreatePool<'info> {
         init,
         payer = admin,
         space = 8 + Pool::INIT_SPACE,
-        seeds = [POOL_SEED.as_bytes(), organization_pubkey.as_ref(), &species_id],
+        seeds = [
+            POOL_SEED.as_bytes(),
+            organization_pubkey.as_ref(),
+            &species_id,
+        ],
         bump,
     )]
     pub pool: Account<'info, Pool>,
+
+    #[account(
+        init,
+        payer = admin,
+        mint::decimals = 9,
+        mint::authority = pool,
+        mint::token_program = token_program,
+        seeds = [
+            POOL_MINT_SEED.as_bytes(),
+            organization_pubkey.as_ref(),
+            &species_id,
+        ],
+        bump,
+    )]
+    pub pool_mint: Account<'info, Mint>,
 
     #[account(
         seeds = [
@@ -53,6 +73,8 @@ pub struct CreatePool<'info> {
         bump,
     )]
     pub organization_vault: SystemAccount<'info>,
+
+    pub token_program: Program<'info, Token>,
 
     pub system_program: Program<'info, System>,
 }
@@ -75,6 +97,9 @@ impl<'info> CreatePool<'info> {
         pool.organization_yield_bps = 20;
         pool.species_name = species_name.clone();
         pool.species_id = bytes_to_string(&species_id);
+        pool.new_species_id = species_id;
+        pool.pool_mint = self.pool_mint.key();
+        pool.vault = self.pool_vault.key();
 
         pool.is_active = true;
         pool.is_crank_scheduled = false;
@@ -86,6 +111,7 @@ impl<'info> CreatePool<'info> {
         pool.pool_bump = bumps.pool;
         pool.org_vault_bump = bumps.organization_vault;
         pool.pool_vault_bump = bumps.pool_vault;
+        pool.pool_mint_bump = bumps.pool_mint;
 
         // Convert to strings for event (events can use String)
         let species_id_str = bytes_to_string(&species_id);

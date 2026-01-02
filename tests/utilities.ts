@@ -5,6 +5,7 @@ import {
   POOL_VAULT_SEED,
   ORG_VAULT_SEED,
   walletPath,
+  POOL_MINT_SEED,
 } from "./constants";
 import fs from "fs";
 
@@ -69,5 +70,10 @@ export const getPoolPdas = (
     PROGRAM_ID
   );
 
-  return { poolPda, poolVaultPda, orgVaultPda };
+  const [poolMintPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from(POOL_MINT_SEED), organizationPubkey.toBuffer(), speciesSeed],
+    PROGRAM_ID
+  );
+
+  return { poolPda, poolMintPda, poolVaultPda, orgVaultPda };
 };
