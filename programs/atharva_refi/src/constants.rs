@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_lang::solana_program::pubkey;
 
 // Atharva ReFi
-pub const ADMIN_PUBKEY: Pubkey = pubkey!("ExYgW7TinWCdrUGEo6kYxK4AQKRvTgbqD7p1GdDchEuW");
+pub const ADMIN_PUBKEY: Pubkey = pubkey!("BkDW9kxJxVC2KGDs94GQRpkowbWfpG1N7sX7HqsNCSL7");
 pub const POOL_SEED: &str = "pool";
 pub const POOL_VAULT_SEED: &str = "pool_vault";
 pub const POOL_MINT_SEED: &str = "pool_mint";
