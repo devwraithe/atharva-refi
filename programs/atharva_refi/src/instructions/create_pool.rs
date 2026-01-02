@@ -12,7 +12,12 @@ use anchor_lang::prelude::*;
 /// - Organization has isolated vault for yield collection
 
 #[derive(Accounts)]
-#[instruction(organization_pubkey: Pubkey, species_id: String)]
+#[instruction(
+    organization_name: String,
+    organization_pubkey: Pubkey,
+    species_name: String,
+    species_id: [u8; 32],
+)]
 pub struct CreatePool<'info> {
     #[account(
         mut,
@@ -24,19 +29,27 @@ pub struct CreatePool<'info> {
         init,
         payer = admin,
         space = 8 + Pool::INIT_SPACE,
-        seeds = [POOL_SEED.as_bytes(), organization_pubkey.as_ref(), species_id.as_bytes()],
+        seeds = [POOL_SEED.as_bytes(), organization_pubkey.as_ref(), &species_id],
         bump,
     )]
     pub pool: Account<'info, Pool>,
 
     #[account(
-        seeds = [POOL_VAULT_SEED.as_bytes(), organization_pubkey.as_ref(), species_id.as_bytes()],
+        seeds = [
+            POOL_VAULT_SEED.as_bytes(),
+            organization_pubkey.as_ref(),
+            &species_id
+        ],
         bump,
     )]
     pub pool_vault: SystemAccount<'info>,
 
     #[account(
-        seeds = [ORG_VAULT_SEED.as_bytes(), organization_pubkey.as_ref(), species_id.as_bytes()],
+        seeds = [
+            ORG_VAULT_SEED.as_bytes(),
+            organization_pubkey.as_ref(),
+            &species_id
+        ],
         bump,
     )]
     pub organization_vault: SystemAccount<'info>,
@@ -49,31 +62,19 @@ impl<'info> CreatePool<'info> {
         organization_name: String,
         organization_pubkey: Pubkey,
         species_name: String,
-        species_id: String,
+        species_id: [u8; 32],
         bumps: &CreatePoolBumps,
     ) -> Result<()> {
         // Validation
-        require!(
-            organization_name.len() > 0 && organization_name.len() <= 50,
-            ErrorCode::InvalidStringLength
-        );
-        require!(
-            species_name.len() > 0 && species_name.len() <= 50,
-            ErrorCode::InvalidStringLength
-        );
-        require!(
-            species_id.len() > 0 && species_id.len() <= 20,
-            ErrorCode::InvalidStringLength
-        );
+        require!(species_id[0] != 0, ErrorCode::InvalidStringLength);
 
         let pool = &mut self.pool;
 
-        // Initialize state
         pool.organization_pubkey = organization_pubkey;
         pool.organization_name = organization_name.clone();
-        pool.organization_yield_bps = 20; // 20% to organizations, 80% to supporters
+        pool.organization_yield_bps = 20;
         pool.species_name = species_name.clone();
-        pool.species_id = species_id.clone();
+        pool.species_id = bytes_to_string(&species_id);
 
         pool.is_active = true;
         pool.is_crank_scheduled = false;
@@ -82,21 +83,31 @@ impl<'info> CreatePool<'info> {
         pool.last_streamed_vault_sol = 0;
         pool.last_stream_ts = 0;
 
-        // Store bumps for CPI calls
         pool.pool_bump = bumps.pool;
         pool.org_vault_bump = bumps.organization_vault;
         pool.pool_vault_bump = bumps.pool_vault;
 
-        // Emit event
+        // Convert to strings for event (events can use String)
+        let species_id_str = bytes_to_string(&species_id);
+
+        msg!("Seed Org: {:?}", organization_pubkey.as_ref());
+        msg!("Seed Species: {:?}", species_id);
+
         emit!(PoolCreated {
             pool: pool.key(),
             organization_pubkey,
             organization_name,
             species_name,
-            species_id,
+            species_id: species_id_str,
             timestamp: Clock::get()?.unix_timestamp as u64,
         });
 
         Ok(())
     }
+}
+
+// Helper function to convert fixed byte array to String
+fn bytes_to_string(bytes: &[u8]) -> String {
+    let len = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+    String::from_utf8_lossy(&bytes[..len]).to_string()
 }
