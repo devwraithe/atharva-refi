@@ -15,6 +15,7 @@ pub struct Pool {
     pub species_name: String,
     #[max_len(50)]
     pub species_id: String,
+    pub new_species_id: [u8; 32],
 
     pub vault: Pubkey,
     pub pool_mint: Pubkey,
@@ -31,4 +32,5 @@ pub struct Pool {
     pub pool_bump: u8,
     pub org_vault_bump: u8,
     pub pool_vault_bump: u8,
+    pub pool_mint_bump: u8,
 }

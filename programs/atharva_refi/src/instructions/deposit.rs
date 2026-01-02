@@ -5,7 +5,7 @@ use crate::states::Pool;
 use anchor_lang::prelude::*;
 use anchor_lang::system_program::{self, Transfer};
 use anchor_spl::associated_token::AssociatedToken;
-use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInterface};
+use anchor_spl::token::{mint_to, Mint, MintTo, Token, TokenAccount};
 
 /// Deposits to pool vault and mints reciept tokens to supporter
 
@@ -16,29 +16,34 @@ pub struct Deposit<'info> {
 
     #[account(
         mut,
-        seeds = [POOL_SEED.as_bytes(), pool.organization_pubkey.as_ref(), pool.species_id.as_bytes()],
+        seeds = [
+            POOL_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id
+        ],
         bump = pool.pool_bump,
     )]
     pub pool: Account<'info, Pool>,
 
     #[account(
+        mut,
         mint::authority = pool,
         mint::token_program = token_program,
         seeds = [
             POOL_MINT_SEED.as_bytes(),
             pool.organization_pubkey.as_ref(),
-            pool.species_id.as_bytes()
+            &pool.new_species_id
         ],
         bump,
     )]
-    pub pool_mint: InterfaceAccount<'info, Mint>,
+    pub pool_mint: Account<'info, Mint>,
 
     #[account(
         mut,
         seeds = [
             POOL_VAULT_SEED.as_bytes(),
             pool.organization_pubkey.as_ref(),
-            pool.species_id.as_bytes()
+            &pool.new_species_id
         ],
         bump,
     )]
@@ -51,15 +56,14 @@ pub struct Deposit<'info> {
         associated_token::authority = supporter,
         associated_token::token_program = token_program,
     )]
-    pub supporter_pool_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub supporter_pool_token_account: Account<'info, TokenAccount>,
 
-    pub token_program: Interface<'info, TokenInterface>,
+    pub token_program: Program<'info, Token>,
 
     pub associated_token_program: Program<'info, AssociatedToken>,
 
     pub system_program: Program<'info, System>,
 }
-
 impl<'info> Deposit<'info> {
     pub fn process(&mut self, amount: u64) -> Result<()> {
         // Validation
@@ -69,7 +73,6 @@ impl<'info> Deposit<'info> {
         let pool = &mut self.pool;
 
         // Update state
-        pool.pool_mint = self.pool_mint.key();
         pool.total_deposits = pool
             .total_deposits
             .checked_add(amount)
@@ -91,15 +94,14 @@ impl<'info> Deposit<'info> {
         system_program::transfer(transfer_cpi_ctx, amount)?;
 
         // Mint receipt tokens for supporter
-        let pool_key = pool.key();
-        let vault_seeds = &[
-            POOL_VAULT_SEED.as_bytes(),
-            pool_key.as_ref(),
+        let seeds = &[
+            POOL_SEED.as_bytes(),
             pool.organization_pubkey.as_ref(),
-            &[pool.org_vault_bump],
+            &pool.new_species_id,
+            &[pool.pool_bump],
         ];
 
-        let signer_seeds = &[&vault_seeds[..]];
+        let signer_seeds = &[&seeds[..]];
 
         let mint_cpi_accounts = MintTo {
             mint: self.pool_mint.to_account_info(),
