@@ -44,7 +44,7 @@ describe("Atharva ReFi Tests", () => {
   const organizationName = "Londolozi Reserve";
   const speciesName = "African Lion";
   const speciesId = "panthera_leo";
-  const depositAmount = new BN(4 * LAMPORTS_PER_SOL);
+  const depositAmount = new BN(10 * LAMPORTS_PER_SOL);
 
   before(async () => {
     // Initialize provider and program
@@ -61,9 +61,9 @@ describe("Atharva ReFi Tests", () => {
     organization = Keypair.generate();
 
     // Airdrop SOL
-    svm.airdrop(admin.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
-    svm.airdrop(supporter.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
-    svm.airdrop(organization.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
+    svm.airdrop(admin.publicKey, BigInt(20 * LAMPORTS_PER_SOL));
+    svm.airdrop(supporter.publicKey, BigInt(20 * LAMPORTS_PER_SOL));
+    svm.airdrop(organization.publicKey, BigInt(20 * LAMPORTS_PER_SOL));
   });
 
   describe("Create Pool", () => {
@@ -454,6 +454,64 @@ describe("Atharva ReFi Tests", () => {
         .rpc();
 
       console.log("✅ Unstaking successful");
+    });
+  });
+
+  /* ---------- SUPPORTER WITHDRAWAL ---------- */
+  describe("Supporter Withdraw", () => {
+    it("withdraws supporter's stake and yields", async () => {
+      const speciesIdBytes = stringToBytes(speciesId, 32);
+      const { poolPda, poolMintPda, poolVaultPda } = getPoolPdas(
+        organization.publicKey,
+        speciesIdBytes
+      );
+
+      // 1. Derive mSOL ATA for the Pool Vault
+      const poolMsolAccount = getAssociatedTokenAddressSync(
+        MSOL_MINT,
+        poolVaultPda,
+        true
+      );
+
+      // 2. Get Supporter's Share Token ATA
+      const supporterPoolTokenAccount = getAssociatedTokenAddressSync(
+        poolMintPda,
+        supporter.publicKey
+      );
+
+      // Calculate amount to withdraw (e.g., 50% of shares)
+      const supporterShares = (await program.account.pool.fetch(poolPda))
+        .totalShares;
+      const withdrawAmount = supporterShares.div(new BN(1));
+
+      // 3. Execute Withdraw
+      await program.methods
+        .supporterWithdraw(withdrawAmount)
+        .accountsStrict({
+          supporter: supporter.publicKey,
+          pool: poolPda,
+          poolMint: poolMintPda,
+          supporterPoolTokenAccount: supporterPoolTokenAccount,
+          marinadeState: M_STATE,
+          msolMint: MSOL_MINT,
+          liqPoolSolLeg: LIQ_POOL_SOL_LEG,
+          liqPoolMsolLeg: LIQ_POOL_MSOL_LEG,
+          treasuryMsolAccount: TREASURY_MSOL,
+          poolMsolAccount: poolMsolAccount,
+          poolVault: poolVaultPda,
+          systemProgram: SystemProgram.programId,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          marinadeProgram: M_PROGRAM_ID,
+        })
+        .signers([supporter])
+        .rpc();
+
+      const poolAfter = await program.account.pool.fetch(poolPda);
+      console.log("✅ Withdrawal successful");
+      console.log(
+        "   Remaining Total Shares:",
+        poolAfter.totalShares.toString()
+      );
     });
   });
 });

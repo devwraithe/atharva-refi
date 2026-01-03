@@ -51,7 +51,7 @@ pub mod atharva_refi {
     pub fn unstake(ctx: Context<Unstake>, amount: u64) -> Result<()> {
         ctx.accounts.process(amount)
     }
-    pub fn supporter_withdraw(ctx: Context<Withdraw>, share_amount: u64) -> Result<()> {
+    pub fn supporter_withdraw(ctx: Context<SupporterWithdraw>, share_amount: u64) -> Result<()> {
         ctx.accounts.process(share_amount)
     }
     pub fn organization_withdraw(ctx: Context<OrganizationWithdraw>, amount: u64) -> Result<()> {
