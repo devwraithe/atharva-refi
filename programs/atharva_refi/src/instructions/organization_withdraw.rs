@@ -6,19 +6,27 @@ use anchor_lang::system_program::{self, Transfer};
 
 #[derive(Accounts)]
 pub struct OrganizationWithdraw<'info> {
-    #[account(address = ADMIN_PUBKEY)]
+    #[account(mut)]
     pub organization: Signer<'info>,
 
     #[account(
         mut,
-        seeds = [POOL_SEED.as_bytes(), pool.organization_pubkey.as_ref(), pool.species_id.as_bytes()],
+        seeds = [
+            POOL_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id,
+        ],
         bump = pool.pool_bump,
     )]
     pub pool: Account<'info, Pool>,
 
     #[account(
         mut,
-        seeds = [ORG_VAULT_SEED.as_bytes(), pool.organization_pubkey.as_ref()],
+        seeds = [
+            ORG_VAULT_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id,
+        ],
         bump = pool.org_vault_bump,
     )]
     pub org_vault: SystemAccount<'info>,
@@ -27,16 +35,20 @@ pub struct OrganizationWithdraw<'info> {
 }
 impl<'info> OrganizationWithdraw<'info> {
     pub fn process(&self, amount: u64) -> Result<()> {
-
         // Checks
         require!(amount > 0, ErrorCode::InvalidAmount);
-        require!(self.pool.total_deposits >= amount, ErrorCode::InsufficientFunds);
+        require!(
+            self.pool.total_deposits >= amount,
+            ErrorCode::InsufficientFunds
+        );
 
-        let pool_bind = self.pool.key();
+        let pool = &self.pool;
+
         let seeds = &[
             ORG_VAULT_SEED.as_bytes(),
-            pool_bind.as_ref(),
-            &[self.pool.org_vault_bump],
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id,
+            &[pool.org_vault_bump],
         ];
         let signer_seeds = &[&seeds[..]];
 
