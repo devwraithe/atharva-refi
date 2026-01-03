@@ -30,6 +30,7 @@ import {
   MSOL_MINT,
   MSOL_MINT_AUTH,
   RESERVE_PDA,
+  TREASURY_MSOL,
 } from "./constants";
 import fs from "fs";
 
@@ -328,6 +329,51 @@ describe("Atharva ReFi Tests", () => {
         .rpc();
 
       console.log("✅ Staking successful");
+
+      const msolBalance = svm.getAccount(poolMsolAccount).lamports;
+      console.log("   mSOL received:", Number(msolBalance) / LAMPORTS_PER_SOL);
+    });
+  });
+
+  describe("Unstake", () => {
+    it("unstakes 1 SOL from Marinade Finance", async () => {
+      const speciesIdBytes = stringToBytes(speciesId, 32);
+      const { poolPda, poolVaultPda } = getPoolPdas(
+        organization.publicKey,
+        speciesIdBytes
+      );
+
+      // Amount to stake (e.g., 2 SOL)
+      const unstakeAmount = new BN(1 * LAMPORTS_PER_SOL);
+
+      // 1. Derive mSOL ATA for the Pool Vault
+      const poolMsolAccount = getAssociatedTokenAddressSync(
+        MSOL_MINT,
+        poolVaultPda,
+        true // allowOwnerOffCurve because poolVaultPda is a PDA
+      );
+
+      console.log("Pool MSOL", poolMsolAccount);
+
+      // 2. Execute Stake
+      await program.methods
+        .unstake(unstakeAmount)
+        .accountsStrict({
+          pool: poolPda,
+          marinadeState: M_STATE,
+          msolMint: MSOL_MINT,
+          liqPoolSolLeg: LIQ_POOL_SOL_LEG,
+          liqPoolMsolLeg: LIQ_POOL_MSOL_LEG,
+          treasuryMsolAccount: TREASURY_MSOL,
+          poolMsolAccount: poolMsolAccount, // This must be an ATA
+          poolVault: poolVaultPda,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          marinadeProgram: M_PROGRAM_ID,
+        })
+        .rpc();
+
+      console.log("✅ Unstaking successful");
 
       const msolBalance = svm.getAccount(poolMsolAccount).lamports;
       console.log("   mSOL received:", Number(msolBalance) / LAMPORTS_PER_SOL);
