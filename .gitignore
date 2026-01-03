@@ -8,3 +8,4 @@ test-ledger
 tests/admin_wallet.json
 tests/utilities
 tests/marinade
+tests/magic_block
