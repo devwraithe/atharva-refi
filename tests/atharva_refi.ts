@@ -514,4 +514,67 @@ describe("Atharva ReFi Tests", () => {
       );
     });
   });
+
+  /* ---------- YIELD STREAMING ---------- */
+  describe("Yield Stream", () => {
+    it("streams 20% of accumulated yield to the organization vault", async () => {
+      const speciesIdBytes = stringToBytes(speciesId, 32);
+      const { poolPda, poolVaultPda, orgVaultPda } = getPoolPdas(
+        organization.publicKey,
+        speciesIdBytes
+      );
+
+      // 1. Get pool's mSOL account
+      const poolMsolAccount = getAssociatedTokenAddressSync(
+        MSOL_MINT,
+        poolVaultPda,
+        true
+      );
+
+      // 2. Fetch state before streaming
+      const poolBefore = await program.account.pool.fetch(poolPda);
+      const orgVaultBefore = await svm.getBalance(orgVaultPda);
+
+      console.log("--- Executing Yield Stream ---");
+      console.log(
+        "Current Checkpoint:",
+        poolBefore.lastStreamedVaultSol.toString()
+      );
+
+      // 3. Execute Stream (Manual override via Organization signer)
+      await program.methods
+        .stream()
+        .accountsStrict({
+          authority: organization.publicKey, // Signing as the manual override
+          pool: poolPda,
+          poolVault: poolVaultPda,
+          poolMsolAccount: poolMsolAccount,
+          organizationVault: orgVaultPda,
+          marinadeState: M_STATE,
+          msolMint: MSOL_MINT,
+          liqPoolSolLeg: LIQ_POOL_SOL_LEG,
+          liqPoolMsolLeg: LIQ_POOL_MSOL_LEG,
+          treasuryMsolAccount: TREASURY_MSOL,
+          systemProgram: SystemProgram.programId,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          marinadeFinanceProgram: M_PROGRAM_ID,
+        })
+        .signers([organization])
+        .rpc();
+
+      // 4. Verify distribution
+      const poolAfter = await program.account.pool.fetch(poolPda);
+      const orgVaultAfter = await svm.getBalance(orgVaultPda);
+
+      console.log("✅ Streamed successfully");
+      console.log(
+        "   New Checkpoint:",
+        poolAfter.lastStreamedVaultSol.toString()
+      );
+
+      expect(poolAfter.lastStreamedVaultSol.toNumber()).to.not.equal(
+        poolBefore.lastStreamedVaultSol.toNumber()
+      );
+    });
+  });
 });

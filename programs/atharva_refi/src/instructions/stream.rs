@@ -22,7 +22,11 @@ pub struct Stream<'info> {
 
     #[account(
         mut,
-        seeds = [POOL_SEED.as_bytes(), pool.organization_pubkey.as_ref(), pool.species_id.as_bytes()],
+        seeds = [
+            POOL_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id
+        ],
         bump = pool.pool_bump,
         constraint = pool.is_active @ ErrorCode::PoolNotActive,
     )]
@@ -34,8 +38,12 @@ pub struct Stream<'info> {
     /// CHECK: Used as a signer and other things
     #[account(
         mut,
-        seeds = [POOL_VAULT_SEED.as_bytes(), pool.organization_pubkey.as_ref(), pool.species_id.as_bytes()],
-        bump,
+        seeds = [
+            POOL_VAULT_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id
+        ],
+        bump = pool.pool_vault_bump,
         constraint = (pool_vault.is_signer || (authority.is_some() && authority.as_ref().unwrap().key() == pool.organization_pubkey)) @ ErrorCode::UnauthorizedStream,
     )]
     pub pool_vault: AccountInfo<'info>,
@@ -50,8 +58,11 @@ pub struct Stream<'info> {
 
     #[account(
         mut,
-        address = pool.organization_pubkey,
-        seeds = [ORG_VAULT_SEED.as_bytes(), pool.organization_pubkey.as_ref(), pool.species_id.as_bytes()],
+        seeds = [
+            ORG_VAULT_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id
+        ],
         bump = pool.org_vault_bump,
     )]
     pub organization_vault: SystemAccount<'info>,
@@ -59,7 +70,7 @@ pub struct Stream<'info> {
     /// Marinade state account
     /// CHECK: Verified by Marinade program
     #[account(mut)]
-    pub marinade_state: Account<'info, MarinadeState>,
+    pub marinade_state: AccountInfo<'info>,
 
     #[account(mut)]
     pub msol_mint: Account<'info, Mint>,
@@ -128,10 +139,15 @@ impl<'info> Stream<'info> {
             return Ok(0);
         }
 
+        let data = self.marinade_state.try_borrow_data()?;
+        // Offsets for Marinade Mainnet: msol_supply (368), total_virtual_staked (376)
+        let msol_supply = u64::from_le_bytes(data[368..376].try_into().unwrap());
+        let total_virtual_staked = u64::from_le_bytes(data[376..384].try_into().unwrap());
+
         let sol_value = (msol_balance as u128)
-            .checked_mul(self.marinade_state.total_virtual_staked_lamports() as u128)
+            .checked_mul(total_virtual_staked as u128)
             .ok_or(ErrorCode::MathError)?
-            .checked_div(self.marinade_state.msol_supply as u128)
+            .checked_div(msol_supply as u128)
             .ok_or(ErrorCode::MathError)?;
 
         u64::try_from(sol_value).map_err(|_| ErrorCode::MathError.into())
@@ -152,10 +168,14 @@ impl<'info> Stream<'info> {
     }
 
     fn sol_to_msol(&self, sol_amount: u64) -> Result<u64> {
+        let data = self.marinade_state.try_borrow_data()?;
+        let msol_supply = u64::from_le_bytes(data[368..376].try_into().unwrap());
+        let total_virtual_staked = u64::from_le_bytes(data[376..384].try_into().unwrap());
+
         let msol_amount = (sol_amount as u128)
-            .checked_mul(self.marinade_state.msol_supply as u128)
+            .checked_mul(msol_supply as u128)
             .ok_or(ErrorCode::MathError)?
-            .checked_div(self.marinade_state.total_virtual_staked_lamports() as u128)
+            .checked_div(total_virtual_staked as u128)
             .ok_or(ErrorCode::MathError)?;
 
         u64::try_from(msol_amount).map_err(|_| ErrorCode::MathError.into())
