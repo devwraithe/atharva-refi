@@ -23,7 +23,6 @@ import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { MAGIC_PROGRAM_ID } from "@magicblock-labs/ephemeral-rollups-sdk";
 
 // Load external account
-
 export function loadAccount(
   svm: any,
   address: PublicKey,
