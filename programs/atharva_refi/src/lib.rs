@@ -1,5 +1,6 @@
 #![allow(deprecated, unexpected_cfgs)]
 use anchor_lang::prelude::*;
+use ephemeral_rollups_sdk::anchor::{commit, delegate, ephemeral};
 
 mod constants;
 mod errors;
@@ -14,8 +15,10 @@ use states::ScheduleStreamArgs;
 
 declare_id!("HesZ7kke1KynNjhizTAAtRoxQZasxYqJ2oTrdw7JNkBx");
 
+#[ephemeral]
 #[program]
 pub mod atharva_refi {
+
     use super::*;
 
     pub fn create_pool(

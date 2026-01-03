@@ -1,9 +1,4 @@
-import {
-  Keypair,
-  SystemProgram,
-  LAMPORTS_PER_SOL,
-  PublicKey,
-} from "@solana/web3.js";
+import { Keypair, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { BN, Program } from "@coral-xyz/anchor";
 import { AtharvaRefi } from "../target/types/atharva_refi";
 import idl from "../target/idl/atharva_refi.json";
@@ -12,7 +7,6 @@ import {
   bytesToString,
   getOrCreateAdminWallet,
   getPoolPdas,
-  loadAccount,
   loadMarinadeAccounts,
   stringToBytes,
 } from "./utilities";
@@ -26,13 +20,15 @@ import {
   M_PROGRAM_ID,
   M_STATE,
   marinadePath,
+  MB_PROGRAM_ID,
   MSOL_LEG_AUTH,
   MSOL_MINT,
   MSOL_MINT_AUTH,
   RESERVE_PDA,
+  STREAM_INTERVAL_MS,
   TREASURY_MSOL,
 } from "./constants";
-import fs from "fs";
+import { MAGIC_PROGRAM_ID } from "@magicblock-labs/ephemeral-rollups-sdk";
 
 describe("Atharva ReFi Tests", () => {
   const svm = fromWorkspace("./");
@@ -55,12 +51,9 @@ describe("Atharva ReFi Tests", () => {
     provider = new LiteSVMProvider(svm);
     program = new Program<AtharvaRefi>(idl, provider);
 
-    // Load Marinade Accounts
-    const marinadeSo = fs.readFileSync("tests/marinade/marinade.so");
-    svm.addProgram(M_PROGRAM_ID, marinadeSo);
-
     // Initialize all Marinade dependencies with one call
     loadMarinadeAccounts(svm, marinadePath);
+    // svm.addProgram(MAGIC_PROGRAM_ID, Buffer.alloc(0));
 
     // Generate keypairs
     admin = getOrCreateAdminWallet();
@@ -332,6 +325,62 @@ describe("Atharva ReFi Tests", () => {
 
       const msolBalance = svm.getAccount(poolMsolAccount).lamports;
       console.log("   mSOL received:", Number(msolBalance) / LAMPORTS_PER_SOL);
+    });
+  });
+
+  describe("Schedule Stream", () => {
+    it("schedules yield streaming for 2-day intervals", async () => {
+      const speciesIdBytes = stringToBytes(speciesId, 32);
+      const { poolPda, poolVaultPda, orgVaultPda } = getPoolPdas(
+        organization.publicKey,
+        speciesIdBytes
+      );
+
+      const scheduleArgs = {
+        taskId: new BN(1),
+        executionIntervalMillis: new BN(STREAM_INTERVAL_MS),
+        iterations: new BN(10),
+      };
+
+      console.log("\n--- Scheduling Stream ---");
+      console.log("Task ID:", 1);
+      console.log("Interval:", STREAM_INTERVAL_MS / 86400000, "days");
+      console.log("Iterations:", 10);
+      console.log("Authority:", organization.publicKey.toBase58());
+
+      await program.methods
+        .scheduleStreams(scheduleArgs)
+        .accountsStrict({
+          authority: organization.publicKey,
+          pool: poolPda,
+          poolVault: poolVaultPda,
+          organizationVault: orgVaultPda,
+          marinadeState: M_STATE,
+          msolMint: MSOL_MINT,
+          liqPoolSolLeg: LIQ_POOL_SOL_LEG,
+          liqPoolMsolLeg: LIQ_POOL_MSOL_LEG,
+          treasuryMsolAccount: TREASURY_MSOL,
+          systemProgram: SystemProgram.programId,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          marinadeProgram: M_PROGRAM_ID,
+          magicProgram: MB_PROGRAM_ID,
+          program: program.programId,
+        })
+        .signers([organization])
+        .rpc();
+
+      // Verify
+      const pool = await program.account.pool.fetch(poolPda);
+
+      expect(pool.isCrankScheduled).to.be.true;
+      expect(pool.lastStreamTs.toNumber()).to.be.greaterThan(0);
+
+      console.log("✅ Stream scheduled successfully");
+      console.log("   Crank Status: Scheduled");
+      console.log(
+        "   Last Stream TS:",
+        new Date(pool.lastStreamTs.toNumber() * 1000).toLocaleString()
+      );
     });
   });
 

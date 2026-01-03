@@ -5,6 +5,8 @@ pub enum ErrorCode {
     // --- Authorization Errors ---
     #[msg("Unauthorized to create pool. Only the designated admin can.")]
     CreatePoolUnauthorized,
+    #[msg("Unauthorized to stake. Only the designated organization or admin can.")]
+    StakingUnauthorized,
     #[msg("Instruction must be signed by the Organization or triggered by the MagicBlock Crank")]
     UnauthorizedStream,
     #[msg("The provided authority does not match the organization's public key")]

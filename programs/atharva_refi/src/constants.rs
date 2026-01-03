@@ -14,17 +14,3 @@ pub const ORG_YIELD_BPS: u128 = 2_000; // 20%
 
 // // Marinade Finance
 pub const MARINADE_PROGRAM_ID: Pubkey = pubkey!("MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD");
-
-// pub mod marinade_finance {
-//     use anchor_lang::prelude::*;
-
-//     pub const PROGRAM_ID: Pubkey = pubkey!("MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD");
-//     pub const STATE: Pubkey = pubkey!("8szGkuLTAux9XMgZ2vtY39jVSowEcpBfFfD8hXSEqdGC");
-//     pub const MSOL_MINT: Pubkey = pubkey!("mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So");
-//     pub const MSOL_MINT_AUTH: Pubkey = pubkey!("3JLPCS1qM2zRw3Dp6V4hZnYHd4toMNPkNesXdX9tg6KM");
-//     pub const LIQ_POOL_SOL_LEG: Pubkey = pubkey!("UefNb6z6yvArqe4cJHTXCqStRsKmWhGxnZzuHbikP5Q");
-//     pub const LIQ_POOL_MSOL_LEG: Pubkey = pubkey!("7GgPYjS5Dza89wV6FpZ23kUJRG5vbQ1GM25ezspYFSoE");
-//     pub const TREASURY_MSOL: Pubkey = pubkey!("8ZUcztoAEhpAeC2ixWewJKQJsSUGYSGPVAjkhDJYf5Gd");
-//     pub const RESERVE_PDA: Pubkey = pubkey!("Du3Ysj1wKbxPKkuPPnvzQLQh8oMSVifs3jGZjJWXFmHN");
-//     pub const MSOL_LEG_AUTH: Pubkey = pubkey!("EyaSjUtSgo9aRD1f8LWXwdvkpDTmXAW54yoSHZRF14WL");
-// }
