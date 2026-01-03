@@ -61,3 +61,8 @@ This automatically includes the 80% yield because:
 4. Burn: share tokens
 5. Update: pool state
 ```
+
+Run - ./dump_marinade.sh - to dump all marinade accounts from mainnet
+
+Dump program - solana program dump -u m MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD marinade.so
+Dump account - solana account -u m 8szGkuLTAux9XMgZ2vtY39jVSowEcpBfFfD8hXSEqdGC --output json > marinade_state.json

@@ -10,7 +10,11 @@ use anchor_spl::token::{Mint, Token};
 pub struct Unstake<'info> {
     #[account(
         mut,
-        seeds = [POOL_SEED.as_bytes(), pool.organization_pubkey.as_ref(), pool.species_id.as_bytes()],
+        seeds = [
+            POOL_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id
+        ],
         bump = pool.pool_bump,
     )]
     pub pool: Account<'info, Pool>,
@@ -49,10 +53,14 @@ pub struct Unstake<'info> {
     /// CHECK: Verified by Marinade program
     #[account(
         mut,
-        seeds = [POOL_VAULT_SEED.as_bytes(), pool.organization_pubkey.as_ref(), pool.species_id.as_bytes()],
+        seeds = [
+            POOL_VAULT_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id,
+        ],
         bump,
     )]
-    pub pool_vault: Signer<'info>,
+    pub pool_vault: SystemAccount<'info>,
 
     pub system_program: Program<'info, System>,
 
@@ -69,14 +77,15 @@ impl<'info> Unstake<'info> {
     pub fn process(&self, msol_amount: u64) -> Result<()> {
         msg!("Unstaking {} mSOL from Marinade...", msol_amount);
 
-        let pool_key = self.pool.key();
-        let vault_seeds = &[
+        let pool = &self.pool;
+
+        let seeds = &[
             POOL_VAULT_SEED.as_bytes(),
-            pool_key.as_ref(),
-            self.pool.organization_pubkey.as_ref(),
-            &[self.pool.pool_vault_bump],
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id,
+            &[pool.pool_vault_bump],
         ];
-        let signer_seeds = &[&vault_seeds[..]];
+        let signer_seeds = &[&seeds[..]];
 
         marinade_liquid_unstake(
             msol_amount,

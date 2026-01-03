@@ -1,17 +1,20 @@
 import { PublicKey } from "@solana/web3.js";
 import idl from "../target/idl/atharva_refi.json";
+import { MAGIC_CONTEXT_ID } from "@magicblock-labs/ephemeral-rollups-sdk";
 
 export const POOL_SEED = "pool";
 export const POOL_VAULT_SEED = "pool_vault";
 export const POOL_MINT_SEED = "pool_mint";
 export const ORG_VAULT_SEED = "organization_vault";
 export const PROGRAM_ID = new PublicKey(idl.address);
+export const STREAM_INTERVAL_MS = 172_800_000; // 2 days in milliseconds
 export const ADMIN_PUBKEY = new PublicKey(
   "BkDW9kxJxVC2KGDs94GQRpkowbWfpG1N7sX7HqsNCSL7"
 );
 
 export const walletPath = "./tests/admin_wallet.json";
 export const marinadePath = "tests/marinade";
+export const mblockPath = "tests/magic_block";
 
 // Marinade
 export const M_PROGRAM_ID = new PublicKey(
@@ -40,4 +43,8 @@ export const RESERVE_PDA = new PublicKey(
 );
 export const MSOL_LEG_AUTH = new PublicKey(
   "EyaSjUtSgo9aRD1f8LWXwdvkpDTmXAW54yoSHZRF14WL"
+);
+
+export const MB_PROGRAM_ID = new PublicKey(
+  "FeNeooF8ACbHzg1k5z7FpyZcBEjYeCnGBHHcJW7qfzsR"
 );

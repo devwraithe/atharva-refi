@@ -14,9 +14,13 @@ import {
   MSOL_MINT,
   MSOL_MINT_AUTH,
   RESERVE_PDA,
+  TREASURY_MSOL,
+  MB_PROGRAM_ID,
+  mblockPath,
 } from "./constants";
 import fs from "fs";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { MAGIC_PROGRAM_ID } from "@magicblock-labs/ephemeral-rollups-sdk";
 
 // Load external account
 
@@ -77,10 +81,19 @@ export function loadMarinadeAccounts(svm: any, marinadePath: string) {
       owner: TOKEN_PROGRAM_ID,
     },
     { address: MSOL_LEG_AUTH, file: "msol_leg_auth.json", owner: M_PROGRAM_ID },
+    {
+      address: TREASURY_MSOL,
+      file: "treasury_msol.json",
+      owner: TOKEN_PROGRAM_ID,
+    },
   ];
 
   // Load the program bytecode first
   svm.addProgram(M_PROGRAM_ID, fs.readFileSync(`${marinadePath}/marinade.so`));
+  svm.addProgram(
+    MAGIC_PROGRAM_ID,
+    fs.readFileSync(`${mblockPath}/magic_block.so`)
+  );
 
   // Iterate and load each account state
   for (const acc of marinadeAccounts) {

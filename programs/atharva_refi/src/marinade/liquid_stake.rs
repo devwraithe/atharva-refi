@@ -19,6 +19,7 @@ pub struct LiquidStakeAccounts<'info> {
     pub msol_mint_authority: AccountInfo<'info>,
     pub system_program: AccountInfo<'info>,
     pub token_program: AccountInfo<'info>,
+    pub marinade_program: AccountInfo<'info>,
 }
 
 /// Perform a liquid staking deposit into Marinade
@@ -66,6 +67,7 @@ pub fn marinade_liquid_stake<'info>(
         accounts.msol_mint_authority,
         accounts.system_program,
         accounts.token_program,
+        accounts.marinade_program,
     ];
 
     match signer_seeds {

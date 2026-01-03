@@ -7,3 +7,4 @@ test-ledger
 .yarn
 tests/admin_wallet.json
 tests/utilities
+tests/marinade

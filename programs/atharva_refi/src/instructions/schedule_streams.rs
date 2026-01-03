@@ -10,7 +10,6 @@ use magicblock_magic_program_api::{args::ScheduleTaskArgs, instruction::MagicBlo
 
 use crate::constants::{MARINADE_PROGRAM_ID, ORG_VAULT_SEED, POOL_SEED, POOL_VAULT_SEED, STREAM_INTERVAL_MS};
 use crate::errors::ErrorCode;
-use crate::states::MarinadeState;
 use crate::states::{Pool, ScheduleStreamArgs};
 
 /// Schedules automated yield streaming via MagicBlock Cranks
@@ -25,13 +24,17 @@ use crate::states::{Pool, ScheduleStreamArgs};
 pub struct ScheduleStream<'info> {
     #[account(
         mut, 
-        constraint = authority.key() == pool.organization_pubkey,
+        // constraint = authority.key() == pool.organization_pubkey,
     )]
     pub authority: Signer<'info>,
 
     #[account(
         mut,
-        seeds = [POOL_SEED.as_bytes(), pool.organization_pubkey.as_ref(), pool.species_id.as_bytes()],
+        seeds = [
+            POOL_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id
+        ],
         bump = pool.pool_bump,
         constraint = pool.is_active @ ErrorCode::PoolNotActive,
         constraint = !pool.is_crank_scheduled @ ErrorCode::CrankAlreadyScheduled,
@@ -40,23 +43,32 @@ pub struct ScheduleStream<'info> {
 
     #[account(
         mut,
-        seeds = [POOL_VAULT_SEED.as_bytes(), pool.key().as_ref(), pool.organization_pubkey.as_ref()],
-        bump = pool.pool_vault_bump,
+        seeds = [
+            POOL_VAULT_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id,
+        ],
+        bump,
     )]
     pub pool_vault: SystemAccount<'info>,
 
     #[account(
         mut,
-        address = pool.organization_pubkey,
-        seeds = [ORG_VAULT_SEED.as_bytes(), pool.organization_pubkey.as_ref(), pool.species_id.as_bytes()],
+        seeds = [
+            ORG_VAULT_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id
+        ],
         bump = pool.org_vault_bump,
     )]
     pub organization_vault: SystemAccount<'info>,
 
     /// Marinade state account
-    /// CHECK: Verified by Marinade program
+    /// CHECK: We use AccountInfo to avoid the ownership check against our own program ID.
+    /// Validation is handled by the Marinade program during CPI.
     #[account(mut)]
-    pub marinade_state: Account<'info, MarinadeState>,
+    pub marinade_state: AccountInfo<'info>,
+    // pub marinade_state: Account<'info, MarinadeState>,
 
     #[account(mut)]
     pub msol_mint: Account<'info, Mint>,
@@ -126,14 +138,16 @@ impl<'info> ScheduleStream<'info> {
             ],
         );
 
+        let pool = &self.pool;
+
         // Invoke Magic Program
         let seeds = &[
             POOL_VAULT_SEED.as_bytes(),
-            self.pool.organization_pubkey.as_ref(),
-            self.pool.species_id.as_bytes(),
-            &[self.pool.pool_vault_bump],
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id,
+            &[pool.pool_vault_bump],
         ];
-        let signer_seeds = &seeds[..];
+        let signer_seeds = &[&seeds[..]];
 
         invoke_signed(
             &schedule_ix,
@@ -142,7 +156,7 @@ impl<'info> ScheduleStream<'info> {
                 self.pool.to_account_info(),
                 self.magic_program.to_account_info(),
             ],
-            &[signer_seeds],
+            signer_seeds,
         )?;
 
         msg!(

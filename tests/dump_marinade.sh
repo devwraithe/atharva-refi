@@ -2,11 +2,17 @@
 MAINNET_RPC="https://api.mainnet-beta.solana.com"
 DEVNET_RPC="https://api.devnet.solana.com"
 DIR="marinade"
+MAGIC_BLOCK_DIR="magic_block"
 
 mkdir -p $DIR
+mkdir -p $MAGIC_BLOCK_DIR
 
 echo "Dumping Program..."
 solana program dump -u $DEVNET_RPC MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD $DIR/marinade.so
+
+echo "Dumping MagicBlock Program..."
+solana program dump -u $DEVNET_RPC Magic11111111111111111111111111111111111111 $MAGIC_BLOCK_DIR/magic_block.so
+
 
 # Define mapping: "address:filename"
 ACCOUNTS=(

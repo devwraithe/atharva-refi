@@ -1,16 +1,25 @@
-use crate::constants::{POOL_SEED, POOL_VAULT_SEED};
+use crate::constants::{ADMIN_PUBKEY, POOL_SEED, POOL_VAULT_SEED};
+use crate::errors::ErrorCode;
 use crate::marinade::{marinade_liquid_stake, LiquidStakeAccounts};
 use crate::states::Pool;
 use anchor_lang::prelude::*;
+use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
 // Stake supporter deposits from pool to marinade
 
 #[derive(Accounts)]
 pub struct Stake<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+
     #[account(
         mut,
-        seeds = [POOL_SEED.as_bytes(), pool.organization_pubkey.as_ref(), pool.species_id.as_bytes()],
+        seeds = [
+            POOL_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id
+        ],
         bump = pool.pool_bump,
     )]
     pub pool: Account<'info, Pool>,
@@ -45,17 +54,22 @@ pub struct Stake<'info> {
     /// Equivalent to Marinade's `transfer_from`
     #[account(
         mut,
-        seeds = [POOL_VAULT_SEED.as_bytes(), pool.organization_pubkey.as_ref(), pool.species_id.as_bytes()],
+        seeds = [
+            POOL_VAULT_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id,
+        ],
         bump,
     )]
-    pub pool_vault: Signer<'info>,
+    pub pool_vault: SystemAccount<'info>,
 
     /// mSOL goes here
     /// Equivalent to Marinade's `mint_to`
     #[account(
-        mut,
-        token::mint = msol_mint,
-        token::authority = pool_vault,
+        init_if_needed,
+        payer = signer, // Org pays for the mSOL account rent
+        associated_token::mint = msol_mint,
+        associated_token::authority = pool_vault,
     )]
     pub pool_msol_account: Account<'info, TokenAccount>,
 
@@ -66,6 +80,11 @@ pub struct Stake<'info> {
     pub system_program: Program<'info, System>,
 
     pub token_program: Program<'info, Token>,
+
+    /// CHECK: The Marinade Program itself
+    pub marinade_program: AccountInfo<'info>,
+
+    pub associated_token_program: Program<'info, AssociatedToken>,
 }
 impl<'info> Stake<'info> {
     /// Stake SOL with Marinade to receive mSOL
@@ -73,14 +92,21 @@ impl<'info> Stake<'info> {
     pub fn process(&self, amount: u64) -> Result<()> {
         msg!("Staking SOL on Marinade...");
 
-        let pool_key = self.pool.key();
-        let vault_seeds = &[
+        // Only allow the designated organization or the admin to trigger staking
+        require!(
+            self.signer.key() == self.pool.organization_pubkey || self.signer.key() == ADMIN_PUBKEY,
+            ErrorCode::StakingUnauthorized
+        );
+
+        let pool = &self.pool;
+
+        let seeds = &[
             POOL_VAULT_SEED.as_bytes(),
-            pool_key.as_ref(),
-            self.pool.organization_pubkey.as_ref(),
-            &[self.pool.pool_vault_bump],
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id,
+            &[pool.pool_vault_bump],
         ];
-        let signer_seeds = &[&vault_seeds[..]];
+        let signer_seeds = &[&seeds[..]];
 
         marinade_liquid_stake(
             amount,
@@ -96,6 +122,7 @@ impl<'info> Stake<'info> {
                 msol_mint_authority: self.msol_mint_authority.to_account_info(),
                 system_program: self.system_program.to_account_info(),
                 token_program: self.token_program.to_account_info(),
+                marinade_program: self.marinade_program.to_account_info(),
             },
             Some(signer_seeds),
         )?;
