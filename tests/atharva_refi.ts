@@ -428,4 +428,32 @@ describe("Atharva ReFi Tests", () => {
       console.log("   mSOL received:", Number(msolBalance) / LAMPORTS_PER_SOL);
     });
   });
+
+  /* ---------- ORGANIZATION WITHDRAWAL ---------- */
+  describe("Organization Withdraw", () => {
+    it("withdraws from organization vault", async () => {
+      const speciesIdBytes = stringToBytes(speciesId, 32);
+      const { poolPda, orgVaultPda } = getPoolPdas(
+        organization.publicKey,
+        speciesIdBytes
+      );
+
+      // Amount to stake (e.g., 2 SOL)
+      const amount = new BN(1 * LAMPORTS_PER_SOL);
+
+      // 2. Execute Stake
+      await program.methods
+        .organizationWithdraw(amount)
+        .accountsStrict({
+          organization: organization.publicKey,
+          pool: poolPda,
+          orgVault: orgVaultPda,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([organization])
+        .rpc();
+
+      console.log("✅ Unstaking successful");
+    });
+  });
 });
