@@ -22,13 +22,17 @@ use crate::{
 /// of accumulated yield.
 
 #[derive(Accounts)]
-pub struct Withdraw<'info> {
+pub struct SupporterWithdraw<'info> {
     #[account(mut)]
     pub supporter: Signer<'info>,
 
     #[account(
         mut,
-        seeds = [POOL_SEED.as_bytes(), pool.organization_pubkey.as_ref(), pool.species_id.as_bytes()],
+        seeds = [
+            POOL_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id
+        ],
         bump = pool.pool_bump,
         constraint = pool.is_active @ ErrorCode::PoolNotActive,
     )]
@@ -37,7 +41,11 @@ pub struct Withdraw<'info> {
     /// Pool token mint (share tokens)
     #[account(
         mut,
-        seeds = [POOL_MINT_SEED.as_bytes(), pool.organization_pubkey.as_ref(), pool.species_id.as_bytes()],
+        seeds = [
+            POOL_MINT_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id
+        ],
         bump,
     )]
     pub pool_mint: Account<'info, Mint>,
@@ -53,7 +61,7 @@ pub struct Withdraw<'info> {
     /// Marinade state account
     /// CHECK: Verified by Marinade program
     #[account(mut)]
-    pub marinade_state: Account<'info, MarinadeState>,
+    pub marinade_state: AccountInfo<'info>,
 
     #[account(mut)]
     pub msol_mint: Account<'info, Mint>,
@@ -84,10 +92,14 @@ pub struct Withdraw<'info> {
     /// CHECK: Verified by Marinade program
     #[account(
         mut,
-        seeds = [POOL_VAULT_SEED.as_bytes(), pool.organization_pubkey.as_ref(), pool.species_id.as_bytes()],
-        bump,
+        seeds = [
+            POOL_VAULT_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id
+        ],
+        bump = pool.pool_vault_bump,
     )]
-    pub pool_vault: Signer<'info>,
+    pub pool_vault: SystemAccount<'info>,
 
     pub system_program: Program<'info, System>,
 
@@ -98,7 +110,7 @@ pub struct Withdraw<'info> {
     pub marinade_program: AccountInfo<'info>,
 }
 
-impl<'info> Withdraw<'info> {
+impl<'info> SupporterWithdraw<'info> {
     pub fn process(&mut self, share_amount: u64) -> Result<()> {
         // Validation
         require!(share_amount > 0, ErrorCode::InvalidAmount);
@@ -154,12 +166,13 @@ impl<'info> Withdraw<'info> {
     }
 
     fn unstake_msol(&self, msol_amount: u64) -> Result<()> {
-        let pool_key = self.pool.key();
+        let pool = &self.pool;
+
         let seeds = &[
             POOL_VAULT_SEED.as_bytes(),
-            pool_key.as_ref(),
-            self.pool.organization_pubkey.as_ref(),
-            &[self.pool.pool_vault_bump],
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id,
+            &[pool.pool_vault_bump],
         ];
         let signer_seeds = &[&seeds[..]];
 
@@ -181,14 +194,19 @@ impl<'info> Withdraw<'info> {
         )
     }
 
-    fn transfer_sol_to_supporter(&self, amount: u64) -> Result<()> {
-        let pool_key = self.pool.key();
+    fn transfer_sol_to_supporter(&self, _amount: u64) -> Result<()> {
+        let pool = &self.pool;
         let seeds = &[
             POOL_VAULT_SEED.as_bytes(),
-            pool_key.as_ref(),
-            self.pool.organization_pubkey.as_ref(),
-            &[self.pool.pool_vault_bump],
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id,
+            &[pool.pool_vault_bump],
         ];
+        let signer_seeds = &[&seeds[..]];
+
+        // FIX: Transfer the actual SOL currently in the vault
+        // (which is what just arrived from Marinade)
+        let amount_to_transfer = self.pool_vault.lamports();
 
         transfer(
             CpiContext::new_with_signer(
@@ -197,9 +215,9 @@ impl<'info> Withdraw<'info> {
                     from: self.pool_vault.to_account_info(),
                     to: self.supporter.to_account_info(),
                 },
-                &[&seeds[..]],
+                signer_seeds,
             ),
-            amount,
+            amount_to_transfer,
         )
     }
 
@@ -218,10 +236,29 @@ impl<'info> Withdraw<'info> {
     }
 
     fn msol_to_sol(&self, msol_amount: u64) -> Result<u64> {
+        let data = self.marinade_state.try_borrow_data()?;
+
+        // Marinade State Field Offsets (Standard for MarBms... program):
+        // msol_supply is at byte 368
+        // total_virtual_staked_lamports is at byte 376
+
+        let msol_supply = u64::from_le_bytes(
+            data[368..376]
+                .try_into()
+                .map_err(|_| ErrorCode::MathError)?,
+        );
+        let total_virtual_staked_lamports = u64::from_le_bytes(
+            data[376..384]
+                .try_into()
+                .map_err(|_| ErrorCode::MathError)?,
+        );
+
+        require!(msol_supply > 0, ErrorCode::MathError);
+
         let sol_value = (msol_amount as u128)
-            .checked_mul(self.marinade_state.total_virtual_staked_lamports() as u128)
+            .checked_mul(total_virtual_staked_lamports as u128)
             .ok_or(ErrorCode::MathError)?
-            .checked_div(self.marinade_state.msol_supply as u128)
+            .checked_div(msol_supply as u128)
             .ok_or(ErrorCode::MathError)?;
 
         u64::try_from(sol_value).map_err(|_| ErrorCode::MathError.into())
