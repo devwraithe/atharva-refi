@@ -1,580 +1,416 @@
-import { Keypair, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import * as anchor from "@coral-xyz/anchor";
 import { BN, Program } from "@coral-xyz/anchor";
 import { AtharvaRefi } from "../target/types/atharva_refi";
-import idl from "../target/idl/atharva_refi.json";
-import { fromWorkspace, LiteSVMProvider } from "anchor-litesvm";
+import { Keypair, LAMPORTS_PER_SOL, SystemProgram } from "@solana/web3.js";
 import {
-  bytesToString,
+  fundAccount,
+  getBalance,
   getOrCreateAdminWallet,
   getPoolPdas,
-  loadMarinadeAccounts,
+  getTokenBalance,
   stringToBytes,
 } from "./utilities";
-import { expect } from "chai";
-import { TOKEN_PROGRAM_ID } from "@coral-xyz/anchor/dist/cjs/utils/token";
-import { getAssociatedTokenAddressSync } from "@solana/spl-token";
-import { ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import {
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  getAssociatedTokenAddressSync,
+  TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
 import {
   LIQ_POOL_MSOL_LEG,
   LIQ_POOL_SOL_LEG,
-  M_PROGRAM_ID,
-  M_STATE,
-  marinadePath,
-  MB_PROGRAM_ID,
+  MAR_PROGRAM_ID,
+  MAR_STATE,
   MSOL_LEG_AUTH,
   MSOL_MINT,
   MSOL_MINT_AUTH,
   RESERVE_PDA,
-  STREAM_INTERVAL_MS,
+  STREAM_TEST_INTERVAL_MS,
   TREASURY_MSOL,
 } from "./constants";
 import { MAGIC_PROGRAM_ID } from "@magicblock-labs/ephemeral-rollups-sdk";
 
-describe("Atharva ReFi Tests", () => {
-  const svm = fromWorkspace("./");
+describe("atharva refi protocol", () => {
+  const provider = anchor.AnchorProvider.env();
+  anchor.setProvider(provider);
 
-  let provider: LiteSVMProvider;
-  let program: Program<AtharvaRefi>;
+  const program = anchor.workspace.AtharvaRefi as Program<AtharvaRefi>;
+
+  const providerER = new anchor.AnchorProvider(
+    new anchor.web3.Connection(
+      process.env.EPHEMERAL_PROVIDER_ENDPOINT ||
+        "https://devnet-as.magicblock.app/",
+      {
+        wsEndpoint:
+          process.env.EPHEMERAL_WS_ENDPOINT ||
+          "wss://devnet-as.magicblock.app/",
+      }
+    ),
+    anchor.Wallet.local()
+  );
 
   let admin: Keypair;
   let supporter: Keypair;
   let organization: Keypair;
+  let supporterPoolTokenAccount: anchor.web3.PublicKey;
+  let poolMsolAccount: anchor.web3.PublicKey;
 
-  // Test data
-  const organizationName = "Londolozi Reserve";
-  const speciesName = "African Lion";
-  const speciesId = "panthera_leo";
-  const depositAmount = new BN(10 * LAMPORTS_PER_SOL);
+  const ORGANIZATION_NAME = "Londolozi Reserve";
+  const SPECIES_NAME = "African Lion";
+  const SPECIES_ID = "panthera_leo";
+
+  const DEPOSIT_AMOUNT = 0.1;
+  const STAKE_AMOUNT = 0.05;
+  const UNSTAKE_AMOUNT = 0.02;
+  const ORG_WITHDRAW_AMOUNT = 0.001;
+  const SUPPORTER_WITHDRAW_AMOUNT = 0.01;
+
+  const SCHEDULE_ITERATIONS = 2;
+  const DELEGATION_WAIT_MS = 5000;
+  const STREAM_WAIT_MS = STREAM_TEST_INTERVAL_MS * SCHEDULE_ITERATIONS + 5000;
+  const UNDELEGATION_WAIT_MS = 5000;
 
   before(async () => {
-    // Initialize provider and program
-    provider = new LiteSVMProvider(svm);
-    program = new Program<AtharvaRefi>(idl, provider);
-
-    // Initialize all Marinade dependencies with one call
-    loadMarinadeAccounts(svm, marinadePath);
-    // svm.addProgram(MAGIC_PROGRAM_ID, Buffer.alloc(0));
-
-    // Generate keypairs
-    admin = getOrCreateAdminWallet();
+    admin = await getOrCreateAdminWallet();
     supporter = Keypair.generate();
     organization = Keypair.generate();
 
-    // Airdrop SOL
-    svm.airdrop(admin.publicKey, BigInt(20 * LAMPORTS_PER_SOL));
-    svm.airdrop(supporter.publicKey, BigInt(20 * LAMPORTS_PER_SOL));
-    svm.airdrop(organization.publicKey, BigInt(20 * LAMPORTS_PER_SOL));
+    await fundAccount(
+      provider.connection,
+      provider.wallet.payer,
+      admin.publicKey,
+      0.05
+    );
+    await fundAccount(
+      provider.connection,
+      provider.wallet.payer,
+      organization.publicKey,
+      0.01
+    );
+    await fundAccount(
+      provider.connection,
+      provider.wallet.payer,
+      supporter.publicKey,
+      0.15
+    );
   });
 
-  describe("Create Pool", () => {
-    it("creates a lion conservation pool for Londolozi Reserve", async () => {
-      const speciesIdBytes = stringToBytes(speciesId, 32);
-      const { poolPda, poolMintPda, poolVaultPda, orgVaultPda } = getPoolPdas(
+  it("creates a lion conservation pool", async () => {
+    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
+    const { poolPda, poolMintPda, poolVaultPda, orgVaultPda } = getPoolPdas(
+      organization.publicKey,
+      speciesIdBytes
+    );
+
+    poolMsolAccount = getAssociatedTokenAddressSync(
+      MSOL_MINT,
+      poolVaultPda,
+      true
+    );
+
+    const tx = await program.methods
+      .createPool(
+        ORGANIZATION_NAME,
         organization.publicKey,
+        SPECIES_NAME,
         speciesIdBytes
-      );
+      )
+      .accountsStrict({
+        admin: admin.publicKey,
+        msolMint: MSOL_MINT,
+        pool: poolPda,
+        poolMint: poolMintPda,
+        poolVault: poolVaultPda,
+        organizationVault: orgVaultPda,
+        poolMsolAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .transaction();
 
-      console.log("\n--- Creating Pool ---");
-      console.log("Pool PDA:", poolPda.toBase58());
-      console.log("Pool Mint:", poolMintPda.toBase58());
-      console.log("Pool Vault:", poolVaultPda.toBase58());
-      console.log("Org Vault:", orgVaultPda.toBase58());
-
-      // Create pool
-      await program.methods
-        .createPool(
-          organizationName,
-          organization.publicKey,
-          speciesName,
-          speciesIdBytes
-        )
-        .accountsStrict({
-          admin: admin.publicKey,
-          pool: poolPda,
-          poolMint: poolMintPda,
-          poolVault: poolVaultPda,
-          organizationVault: orgVaultPda,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([admin])
-        .rpc();
-
-      // Verify pool state
-      const pool = await program.account.pool.fetch(poolPda);
-
-      expect(pool.organizationPubkey.toString()).to.equal(
-        organization.publicKey.toString()
-      );
-      expect(pool.organizationName).to.equal(organizationName);
-      expect(pool.speciesName).to.equal(speciesName);
-      expect(pool.speciesId).to.equal(speciesId);
-      expect(pool.isActive).to.be.true;
-      expect(pool.isCrankScheduled).to.be.false;
-      expect(pool.totalDeposits.toNumber()).to.equal(0);
-      expect(pool.totalShares.toNumber()).to.equal(0);
-      expect(pool.organizationYieldBps).to.equal(20);
-
-      console.log("✅ Pool created successfully");
-      console.log("   Organization:", pool.organizationName);
-      console.log("   Species:", pool.speciesName);
-      console.log("   Yield BPS:", pool.organizationYieldBps);
-    });
+    await provider.sendAndConfirm(tx, [admin]);
   });
 
-  describe("Deposit", () => {
-    it("supporter deposits 4 SOL into lion pool", async () => {
-      const speciesIdBytes = stringToBytes(speciesId, 32);
+  it("deposits SOL into the pool", async () => {
+    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
+    const { poolPda, poolMintPda, poolVaultPda } = getPoolPdas(
+      organization.publicKey,
+      speciesIdBytes
+    );
 
-      console.log("Organization Pubkey: ", organization.publicKey);
-      console.log("New Species ID: ", speciesIdBytes);
-      console.log("Species ID: ", bytesToString(speciesIdBytes));
+    supporterPoolTokenAccount = getAssociatedTokenAddressSync(
+      poolMintPda,
+      supporter.publicKey
+    );
 
-      const { poolPda, poolMintPda, poolVaultPda } = getPoolPdas(
-        organization.publicKey,
-        speciesIdBytes
-      );
+    const tx = await program.methods
+      .deposit(new BN(DEPOSIT_AMOUNT * LAMPORTS_PER_SOL))
+      .accountsStrict({
+        supporter: supporter.publicKey,
+        pool: poolPda,
+        poolMint: poolMintPda,
+        poolVault: poolVaultPda,
+        supporterPoolTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .transaction();
 
-      // Get supporter's pool token account (ATA)
-      const supporterPoolTokenAccount = getAssociatedTokenAddressSync(
-        poolMintPda,
-        supporter.publicKey
-      );
+    await provider.sendAndConfirm(tx, [supporter]);
 
-      console.log("\n--- Depositing SOL ---");
-      console.log("Supporter:", supporter.publicKey.toBase58());
-      console.log(
-        "Amount:",
-        depositAmount.toNumber() / LAMPORTS_PER_SOL,
-        "SOL"
-      );
-      console.log("Token Account:", supporterPoolTokenAccount.toBase58());
-
-      // Get balances before
-      const supporterBalanceBefore = svm.getBalance(supporter.publicKey);
-      const poolVaultBalanceBefore = svm.getBalance(poolVaultPda);
-
-      // Deposit
-      await program.methods
-        .deposit(depositAmount)
-        .accountsStrict({
-          supporter: supporter.publicKey,
-          pool: poolPda,
-          poolMint: poolMintPda,
-          poolVault: poolVaultPda,
-          supporterPoolTokenAccount,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([supporter])
-        .rpc();
-
-      // Get balances after
-      const supporterBalanceAfter = svm.getBalance(supporter.publicKey);
-      const poolVaultBalanceAfter = svm.getBalance(poolVaultPda);
-
-      // Verify pool state
-      const pool = await program.account.pool.fetch(poolPda);
-
-      expect(pool.totalDeposits.toString()).to.equal(depositAmount.toString());
-      expect(pool.totalShares.toString()).to.equal(depositAmount.toString());
-
-      console.log("✅ Deposit successful");
-      console.log(
-        "   Total Deposits:",
-        pool.totalDeposits.toNumber() / LAMPORTS_PER_SOL,
-        "SOL"
-      );
-      console.log(
-        "   Total Shares:",
-        pool.totalShares.toNumber() / LAMPORTS_PER_SOL
-      );
-      console.log(
-        "   Pool Vault Balance:",
-        Number(poolVaultBalanceAfter) / LAMPORTS_PER_SOL,
-        "SOL"
-      );
-
-      // Verify supporter received pool tokens
-      const tokenAccount = await program.provider.connection.getAccountInfo(
-        supporterPoolTokenAccount
-      );
-      expect(tokenAccount).to.not.be.null;
-      console.log("   Supporter received pool tokens ✓");
-    });
-
-    it("fails when pool is inactive", async () => {
-      const speciesIdBytes = stringToBytes(speciesId, 32);
-      const { poolPda, poolMintPda, poolVaultPda } = getPoolPdas(
-        organization.publicKey,
-        speciesIdBytes
-      );
-
-      const supporterPoolTokenAccount = getAssociatedTokenAddressSync(
-        poolMintPda,
-        supporter.publicKey
-      );
-
-      // First, deactivate the pool (you'd need a toggle_pool_status instruction)
-      // For now, this test demonstrates the expected behavior
-
-      try {
-        await program.methods
-          .deposit(new BN(LAMPORTS_PER_SOL))
-          .accountsStrict({
-            supporter: supporter.publicKey,
-            pool: poolPda,
-            poolMint: poolMintPda,
-            poolVault: poolVaultPda,
-            supporterPoolTokenAccount,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-          })
-          .signers([supporter])
-          .rpc();
-
-        // If pool is inactive, this should fail
-        expect.fail("Should have failed with inactive pool");
-      } catch (error) {
-        // Expected to fail if pool inactive constraint exists
-        console.log("✅ Correctly rejected inactive pool deposit");
-      }
-    });
-
-    it("fails with zero deposit amount", async () => {
-      const speciesIdBytes = stringToBytes(speciesId, 32);
-      const { poolPda, poolMintPda, poolVaultPda } = getPoolPdas(
-        organization.publicKey,
-        speciesIdBytes
-      );
-
-      const supporterPoolTokenAccount = getAssociatedTokenAddressSync(
-        poolMintPda,
-        supporter.publicKey
-      );
-
-      try {
-        await program.methods
-          .deposit(new BN(0))
-          .accountsStrict({
-            supporter: supporter.publicKey,
-            pool: poolPda,
-            poolMint: poolMintPda,
-            poolVault: poolVaultPda,
-            supporterPoolTokenAccount,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-          })
-          .signers([supporter])
-          .rpc();
-
-        expect.fail("Should have failed with zero amount");
-      } catch (error) {
-        console.log("✅ Correctly rejected zero deposit");
-      }
-    });
+    getBalance(provider, "Pool Vault", poolVaultPda);
   });
 
-  describe("Stake", () => {
-    it("stakes 2 SOL on Marinade Finance", async () => {
-      const speciesIdBytes = stringToBytes(speciesId, 32);
-      const { poolPda, poolVaultPda } = getPoolPdas(
-        organization.publicKey,
-        speciesIdBytes
-      );
+  it("stakes SOL on Marinade and receives mSOL", async () => {
+    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
+    const { poolPda, poolVaultPda } = getPoolPdas(
+      organization.publicKey,
+      speciesIdBytes
+    );
 
-      // Amount to stake (e.g., 2 SOL)
-      const stakeAmount = new BN(2 * LAMPORTS_PER_SOL);
+    const tx = await program.methods
+      .stake(new BN(STAKE_AMOUNT * LAMPORTS_PER_SOL))
+      .accountsStrict({
+        pool: poolPda,
+        marinadeState: MAR_STATE,
+        msolMint: MSOL_MINT,
+        liqPoolSolLeg: LIQ_POOL_SOL_LEG,
+        liqPoolMsolLeg: LIQ_POOL_MSOL_LEG,
+        liqPoolMsolLegAuthority: MSOL_LEG_AUTH,
+        reservePda: RESERVE_PDA,
+        poolVault: poolVaultPda,
+        poolMsolAccount,
+        msolMintAuthority: MSOL_MINT_AUTH,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        marinadeProgram: MAR_PROGRAM_ID,
+      })
+      .transaction();
 
-      // 1. Derive mSOL ATA for the Pool Vault
-      const poolMsolAccount = getAssociatedTokenAddressSync(
-        MSOL_MINT,
-        poolVaultPda,
-        true // allowOwnerOffCurve because poolVaultPda is a PDA
-      );
+    await provider.sendAndConfirm(tx, []);
 
-      console.log("Pool MSOL", poolMsolAccount);
-
-      // 2. Execute Stake
-      await program.methods
-        .stake(stakeAmount)
-        .accountsStrict({
-          pool: poolPda,
-          signer: admin.publicKey,
-          marinadeState: M_STATE,
-          msolMint: MSOL_MINT,
-          liqPoolSolLeg: LIQ_POOL_SOL_LEG,
-          liqPoolMsolLeg: LIQ_POOL_MSOL_LEG,
-          liqPoolMsolLegAuthority: MSOL_LEG_AUTH,
-          reservePda: RESERVE_PDA,
-          poolVault: poolVaultPda,
-          poolMsolAccount: poolMsolAccount, // This must be an ATA
-          msolMintAuthority: MSOL_MINT_AUTH,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, // Added
-          systemProgram: SystemProgram.programId,
-          marinadeProgram: M_PROGRAM_ID,
-        })
-        .signers([admin])
-        .rpc();
-
-      console.log("✅ Staking successful");
-
-      const msolBalance = svm.getAccount(poolMsolAccount).lamports;
-      console.log("   mSOL received:", Number(msolBalance) / LAMPORTS_PER_SOL);
-    });
+    getTokenBalance(provider, "Pool mSOL", poolMsolAccount);
   });
 
-  describe("Schedule Stream", () => {
-    it("schedules yield streaming for 2-day intervals", async () => {
-      const speciesIdBytes = stringToBytes(speciesId, 32);
-      const { poolPda, poolVaultPda, orgVaultPda } = getPoolPdas(
-        organization.publicKey,
-        speciesIdBytes
-      );
+  it("streams yield to organization vault", async () => {
+    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
+    const { poolPda, poolVaultPda, orgVaultPda } = getPoolPdas(
+      organization.publicKey,
+      speciesIdBytes
+    );
 
-      const scheduleArgs = {
+    const tx = await program.methods
+      .stream()
+      .accountsStrict({
+        pool: poolPda,
+        organizationVault: orgVaultPda,
+        marinadeState: MAR_STATE,
+        msolMint: MSOL_MINT,
+        liqPoolSolLeg: LIQ_POOL_SOL_LEG,
+        liqPoolMsolLeg: LIQ_POOL_MSOL_LEG,
+        treasuryMsolAccount: TREASURY_MSOL,
+        poolMsolAccount,
+        poolVault: poolVaultPda,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        marinadeProgram: MAR_PROGRAM_ID,
+      })
+      .transaction();
+
+    await provider.sendAndConfirm(tx, []);
+
+    getBalance(provider, "Organization Vault", orgVaultPda);
+  });
+
+  it("delegates pool to ephemeral rollups", async () => {
+    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
+    const { poolPda } = getPoolPdas(organization.publicKey, speciesIdBytes);
+
+    const tx = await program.methods
+      .delegate()
+      .accountsPartial({
+        payer: admin.publicKey,
+        pool: poolPda,
+      })
+      .transaction();
+
+    await provider.sendAndConfirm(tx, [admin]);
+    await new Promise((resolve) => setTimeout(resolve, DELEGATION_WAIT_MS));
+  });
+
+  it("schedules automatic yield streaming", async () => {
+    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
+    const { poolPda, poolVaultPda, orgVaultPda } = getPoolPdas(
+      organization.publicKey,
+      speciesIdBytes
+    );
+
+    const orgBalanceBefore = await provider.connection.getBalance(orgVaultPda);
+
+    const tx = await program.methods
+      .scheduleStreams({
         taskId: new BN(1),
-        executionIntervalMillis: new BN(STREAM_INTERVAL_MS),
-        iterations: new BN(10),
-      };
+        executionIntervalMillis: new BN(STREAM_TEST_INTERVAL_MS),
+        iterations: new BN(SCHEDULE_ITERATIONS),
+      })
+      .accountsStrict({
+        authority: admin.publicKey,
+        pool: poolPda,
+        poolVault: poolVaultPda,
+        organizationVault: orgVaultPda,
+        marinadeState: MAR_STATE,
+        msolMint: MSOL_MINT,
+        liqPoolSolLeg: LIQ_POOL_SOL_LEG,
+        liqPoolMsolLeg: LIQ_POOL_MSOL_LEG,
+        treasuryMsolAccount: TREASURY_MSOL,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        marinadeProgram: MAR_PROGRAM_ID,
+        magicProgram: MAGIC_PROGRAM_ID,
+        program: program.programId,
+        systemProgram: SystemProgram.programId,
+      })
+      .transaction();
 
-      console.log("\n--- Scheduling Stream ---");
-      console.log("Task ID:", 1);
-      console.log("Interval:", STREAM_INTERVAL_MS / 86400000, "days");
-      console.log("Iterations:", 10);
-      console.log("Authority:", organization.publicKey.toBase58());
+    tx.feePayer = admin.publicKey;
+    tx.recentBlockhash = (
+      await providerER.connection.getLatestBlockhash()
+    ).blockhash;
+    tx.sign(admin);
 
-      await program.methods
-        .scheduleStreams(scheduleArgs)
-        .accountsStrict({
-          authority: organization.publicKey,
-          pool: poolPda,
-          poolVault: poolVaultPda,
-          organizationVault: orgVaultPda,
-          marinadeState: M_STATE,
-          msolMint: MSOL_MINT,
-          liqPoolSolLeg: LIQ_POOL_SOL_LEG,
-          liqPoolMsolLeg: LIQ_POOL_MSOL_LEG,
-          treasuryMsolAccount: TREASURY_MSOL,
-          systemProgram: SystemProgram.programId,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          marinadeProgram: M_PROGRAM_ID,
-          magicProgram: MB_PROGRAM_ID,
-          program: program.programId,
-        })
-        .signers([organization])
-        .rpc();
+    const signature = await providerER.connection.sendRawTransaction(
+      tx.serialize(),
+      { skipPreflight: true }
+    );
+    await providerER.connection.confirmTransaction(signature);
 
-      // Verify
-      const pool = await program.account.pool.fetch(poolPda);
+    await new Promise((resolve) => setTimeout(resolve, STREAM_WAIT_MS));
 
-      expect(pool.isCrankScheduled).to.be.true;
-      expect(pool.lastStreamTs.toNumber()).to.be.greaterThan(0);
+    const orgBalanceAfter = await provider.connection.getBalance(orgVaultPda);
+    const streamed = orgBalanceAfter - orgBalanceBefore;
 
-      console.log("✅ Stream scheduled successfully");
-      console.log("   Crank Status: Scheduled");
-      console.log(
-        "   Last Stream TS:",
-        new Date(pool.lastStreamTs.toNumber() * 1000).toLocaleString()
-      );
-    });
+    console.log(`1st Streamed: ${streamed / LAMPORTS_PER_SOL} SOL`);
+    getBalance(provider, "Organization Vault", orgVaultPda);
+
+    const orgBalanceAfter2 = await providerER.connection.getBalance(
+      orgVaultPda
+    );
+    console.log(
+      `2nd Org Balance After: ${orgBalanceAfter2 / LAMPORTS_PER_SOL} SOL`
+    );
   });
 
-  describe("Unstake", () => {
-    it("unstakes 1 SOL from Marinade Finance", async () => {
-      const speciesIdBytes = stringToBytes(speciesId, 32);
-      const { poolPda, poolVaultPda } = getPoolPdas(
-        organization.publicKey,
-        speciesIdBytes
-      );
+  it("undelegates pool from ephemeral rollups", async () => {
+    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
+    const { poolPda } = getPoolPdas(organization.publicKey, speciesIdBytes);
 
-      // Amount to stake (e.g., 2 SOL)
-      const unstakeAmount = new BN(1 * LAMPORTS_PER_SOL);
+    const tx = await program.methods
+      .undelegate()
+      .accounts({
+        payer: admin.publicKey,
+        pool: poolPda,
+      })
+      .transaction();
 
-      // 1. Derive mSOL ATA for the Pool Vault
-      const poolMsolAccount = getAssociatedTokenAddressSync(
-        MSOL_MINT,
-        poolVaultPda,
-        true // allowOwnerOffCurve because poolVaultPda is a PDA
-      );
+    tx.feePayer = admin.publicKey;
+    tx.recentBlockhash = (
+      await providerER.connection.getLatestBlockhash()
+    ).blockhash;
+    tx.sign(admin);
 
-      console.log("Pool MSOL", poolMsolAccount);
+    const signature = await providerER.connection.sendRawTransaction(
+      tx.serialize(),
+      { skipPreflight: true }
+    );
+    await providerER.connection.confirmTransaction(signature);
 
-      // 2. Execute Stake
-      await program.methods
-        .unstake(unstakeAmount)
-        .accountsStrict({
-          pool: poolPda,
-          marinadeState: M_STATE,
-          msolMint: MSOL_MINT,
-          liqPoolSolLeg: LIQ_POOL_SOL_LEG,
-          liqPoolMsolLeg: LIQ_POOL_MSOL_LEG,
-          treasuryMsolAccount: TREASURY_MSOL,
-          poolMsolAccount: poolMsolAccount, // This must be an ATA
-          poolVault: poolVaultPda,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          marinadeProgram: M_PROGRAM_ID,
-        })
-        .rpc();
+    await new Promise((resolve) => setTimeout(resolve, UNDELEGATION_WAIT_MS));
 
-      console.log("✅ Unstaking successful");
-
-      const msolBalance = svm.getAccount(poolMsolAccount).lamports;
-      console.log("   mSOL received:", Number(msolBalance) / LAMPORTS_PER_SOL);
-    });
+    await program.account.pool.fetch(poolPda);
   });
 
-  /* ---------- ORGANIZATION WITHDRAWAL ---------- */
-  describe("Organization Withdraw", () => {
-    it("withdraws from organization vault", async () => {
-      const speciesIdBytes = stringToBytes(speciesId, 32);
-      const { poolPda, orgVaultPda } = getPoolPdas(
-        organization.publicKey,
-        speciesIdBytes
-      );
+  it("unstakes mSOL on Marinade and receives SOL", async () => {
+    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
+    const { poolPda, poolVaultPda } = getPoolPdas(
+      organization.publicKey,
+      speciesIdBytes
+    );
 
-      // Amount to stake (e.g., 2 SOL)
-      const amount = new BN(1 * LAMPORTS_PER_SOL);
+    const tx = await program.methods
+      .unstake(new BN(UNSTAKE_AMOUNT * LAMPORTS_PER_SOL))
+      .accountsStrict({
+        pool: poolPda,
+        marinadeState: MAR_STATE,
+        msolMint: MSOL_MINT,
+        liqPoolSolLeg: LIQ_POOL_SOL_LEG,
+        liqPoolMsolLeg: LIQ_POOL_MSOL_LEG,
+        treasuryMsolAccount: TREASURY_MSOL,
+        poolVault: poolVaultPda,
+        poolMsolAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        marinadeProgram: MAR_PROGRAM_ID,
+      })
+      .transaction();
 
-      // 2. Execute Stake
-      await program.methods
-        .organizationWithdraw(amount)
-        .accountsStrict({
-          organization: organization.publicKey,
-          pool: poolPda,
-          orgVault: orgVaultPda,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([organization])
-        .rpc();
+    await provider.sendAndConfirm(tx, []);
 
-      console.log("✅ Unstaking successful");
-    });
+    getBalance(provider, "Pool Vault", poolVaultPda);
   });
 
-  /* ---------- SUPPORTER WITHDRAWAL ---------- */
-  describe("Supporter Withdraw", () => {
-    it("withdraws supporter's stake and yields", async () => {
-      const speciesIdBytes = stringToBytes(speciesId, 32);
-      const { poolPda, poolMintPda, poolVaultPda } = getPoolPdas(
-        organization.publicKey,
-        speciesIdBytes
-      );
+  it("withdraws organization yields", async () => {
+    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
+    const { poolPda, orgVaultPda } = getPoolPdas(
+      organization.publicKey,
+      speciesIdBytes
+    );
 
-      // 1. Derive mSOL ATA for the Pool Vault
-      const poolMsolAccount = getAssociatedTokenAddressSync(
-        MSOL_MINT,
-        poolVaultPda,
-        true
-      );
+    const tx = await program.methods
+      .organizationWithdraw(new BN(ORG_WITHDRAW_AMOUNT * LAMPORTS_PER_SOL))
+      .accountsStrict({
+        organization: organization.publicKey,
+        pool: poolPda,
+        orgVault: orgVaultPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .transaction();
 
-      // 2. Get Supporter's Share Token ATA
-      const supporterPoolTokenAccount = getAssociatedTokenAddressSync(
-        poolMintPda,
-        supporter.publicKey
-      );
+    await provider.sendAndConfirm(tx, [organization]);
 
-      // Calculate amount to withdraw (e.g., 50% of shares)
-      const supporterShares = (await program.account.pool.fetch(poolPda))
-        .totalShares;
-      const withdrawAmount = supporterShares.div(new BN(1));
-
-      // 3. Execute Withdraw
-      await program.methods
-        .supporterWithdraw(withdrawAmount)
-        .accountsStrict({
-          supporter: supporter.publicKey,
-          pool: poolPda,
-          poolMint: poolMintPda,
-          supporterPoolTokenAccount: supporterPoolTokenAccount,
-          marinadeState: M_STATE,
-          msolMint: MSOL_MINT,
-          liqPoolSolLeg: LIQ_POOL_SOL_LEG,
-          liqPoolMsolLeg: LIQ_POOL_MSOL_LEG,
-          treasuryMsolAccount: TREASURY_MSOL,
-          poolMsolAccount: poolMsolAccount,
-          poolVault: poolVaultPda,
-          systemProgram: SystemProgram.programId,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          marinadeProgram: M_PROGRAM_ID,
-        })
-        .signers([supporter])
-        .rpc();
-
-      const poolAfter = await program.account.pool.fetch(poolPda);
-      console.log("✅ Withdrawal successful");
-      console.log(
-        "   Remaining Total Shares:",
-        poolAfter.totalShares.toString()
-      );
-    });
+    getBalance(provider, "Organization Vault", orgVaultPda);
   });
 
-  /* ---------- YIELD STREAMING ---------- */
-  describe("Yield Stream", () => {
-    it("streams 20% of accumulated yield to the organization vault", async () => {
-      const speciesIdBytes = stringToBytes(speciesId, 32);
-      const { poolPda, poolVaultPda, orgVaultPda } = getPoolPdas(
-        organization.publicKey,
-        speciesIdBytes
-      );
+  it("withdraws supporter stake and yields", async () => {
+    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
+    const { poolPda, poolMintPda, poolVaultPda } = getPoolPdas(
+      organization.publicKey,
+      speciesIdBytes
+    );
 
-      // 1. Get pool's mSOL account
-      const poolMsolAccount = getAssociatedTokenAddressSync(
-        MSOL_MINT,
-        poolVaultPda,
-        true
-      );
+    const tx = await program.methods
+      .supporterWithdraw(new BN(SUPPORTER_WITHDRAW_AMOUNT * LAMPORTS_PER_SOL))
+      .accountsStrict({
+        supporter: supporter.publicKey,
+        pool: poolPda,
+        poolMint: poolMintPda,
+        supporterPoolTokenAccount,
+        marinadeState: MAR_STATE,
+        msolMint: MSOL_MINT,
+        liqPoolSolLeg: LIQ_POOL_SOL_LEG,
+        liqPoolMsolLeg: LIQ_POOL_MSOL_LEG,
+        treasuryMsolAccount: TREASURY_MSOL,
+        poolMsolAccount,
+        poolVault: poolVaultPda,
+        systemProgram: SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        marinadeProgram: MAR_PROGRAM_ID,
+      })
+      .transaction();
 
-      // 2. Fetch state before streaming
-      const poolBefore = await program.account.pool.fetch(poolPda);
-      const orgVaultBefore = await svm.getBalance(orgVaultPda);
+    await provider.sendAndConfirm(tx, [supporter]);
 
-      console.log("--- Executing Yield Stream ---");
-      console.log(
-        "Current Checkpoint:",
-        poolBefore.lastStreamedVaultSol.toString()
-      );
-
-      // 3. Execute Stream (Manual override via Organization signer)
-      await program.methods
-        .stream()
-        .accountsStrict({
-          authority: organization.publicKey, // Signing as the manual override
-          pool: poolPda,
-          poolVault: poolVaultPda,
-          poolMsolAccount: poolMsolAccount,
-          organizationVault: orgVaultPda,
-          marinadeState: M_STATE,
-          msolMint: MSOL_MINT,
-          liqPoolSolLeg: LIQ_POOL_SOL_LEG,
-          liqPoolMsolLeg: LIQ_POOL_MSOL_LEG,
-          treasuryMsolAccount: TREASURY_MSOL,
-          systemProgram: SystemProgram.programId,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          marinadeFinanceProgram: M_PROGRAM_ID,
-        })
-        .signers([organization])
-        .rpc();
-
-      // 4. Verify distribution
-      const poolAfter = await program.account.pool.fetch(poolPda);
-      const orgVaultAfter = await svm.getBalance(orgVaultPda);
-
-      console.log("✅ Streamed successfully");
-      console.log(
-        "   New Checkpoint:",
-        poolAfter.lastStreamedVaultSol.toString()
-      );
-
-      expect(poolAfter.lastStreamedVaultSol.toNumber()).to.not.equal(
-        poolBefore.lastStreamedVaultSol.toNumber()
-      );
-    });
+    getBalance(provider, "Supporter", supporter.publicKey);
+    getBalance(provider, "Pool Vault", poolVaultPda);
   });
 });

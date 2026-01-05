@@ -4,7 +4,6 @@ use anchor_spl::token::{burn, Burn, Mint, Token, TokenAccount};
 
 use crate::constants::MARINADE_PROGRAM_ID;
 use crate::marinade::marinade_liquid_unstake;
-use crate::states::MarinadeState;
 use crate::{
     constants::{POOL_MINT_SEED, POOL_SEED, POOL_VAULT_SEED},
     errors::ErrorCode,

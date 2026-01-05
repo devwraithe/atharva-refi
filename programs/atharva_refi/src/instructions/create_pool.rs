@@ -1,9 +1,12 @@
-use crate::constants::{ADMIN_PUBKEY, ORG_VAULT_SEED, POOL_MINT_SEED, POOL_SEED, POOL_VAULT_SEED};
+use crate::constants::{
+    ADMIN_PUBKEY, MSOL_MINT, ORG_VAULT_SEED, POOL_MINT_SEED, POOL_SEED, POOL_VAULT_SEED,
+};
 use crate::errors::ErrorCode;
 use crate::events::PoolCreated;
 use crate::states::Pool;
 use anchor_lang::prelude::*;
-use anchor_spl::token::{Mint, Token};
+use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::token::{Mint, Token, TokenAccount};
 
 /// Creates a conservation pool for a specific species under an organization
 ///
@@ -25,6 +28,9 @@ pub struct CreatePool<'info> {
         address = ADMIN_PUBKEY @ ErrorCode::CreatePoolUnauthorized
     )]
     pub admin: Signer<'info>,
+
+    #[account(address = MSOL_MINT)]
+    pub msol_mint: Account<'info, Mint>,
 
     #[account(
         init,
@@ -74,7 +80,19 @@ pub struct CreatePool<'info> {
     )]
     pub organization_vault: SystemAccount<'info>,
 
+    /// mSOL goes here
+    /// Equivalent to Marinade's `mint_to`
+    #[account(
+        init_if_needed,
+        payer = admin,
+        associated_token::mint = msol_mint,
+        associated_token::authority = pool_vault,
+    )]
+    pub pool_msol_account: Account<'info, TokenAccount>,
+
     pub token_program: Program<'info, Token>,
+
+    pub associated_token_program: Program<'info, AssociatedToken>,
 
     pub system_program: Program<'info, System>,
 }
@@ -116,9 +134,6 @@ impl<'info> CreatePool<'info> {
         // Convert to strings for event (events can use String)
         let species_id_str = bytes_to_string(&species_id);
 
-        msg!("Seed Org: {:?}", organization_pubkey.as_ref());
-        msg!("Seed Species: {:?}", species_id);
-
         emit!(PoolCreated {
             pool: pool.key(),
             organization_pubkey,
@@ -127,6 +142,10 @@ impl<'info> CreatePool<'info> {
             species_id: species_id_str,
             timestamp: Clock::get()?.unix_timestamp as u64,
         });
+
+        msg!("Pool created: {}", pool.key());
+        msg!("Pool Vault: {}", self.pool_vault.key());
+        msg!("Pool mSOL Account: {}", self.pool_msol_account.key());
 
         Ok(())
     }

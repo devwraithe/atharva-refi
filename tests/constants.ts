@@ -8,6 +8,7 @@ export const POOL_MINT_SEED = "pool_mint";
 export const ORG_VAULT_SEED = "organization_vault";
 export const PROGRAM_ID = new PublicKey(idl.address);
 export const STREAM_INTERVAL_MS = 172_800_000; // 2 days in milliseconds
+export const STREAM_TEST_INTERVAL_MS = 5000; // 5 seconds for testing
 export const ADMIN_PUBKEY = new PublicKey(
   "BkDW9kxJxVC2KGDs94GQRpkowbWfpG1N7sX7HqsNCSL7"
 );
@@ -17,10 +18,10 @@ export const marinadePath = "tests/marinade";
 export const mblockPath = "tests/magic_block";
 
 // Marinade
-export const M_PROGRAM_ID = new PublicKey(
+export const MAR_PROGRAM_ID = new PublicKey(
   "MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD"
 );
-export const M_STATE = new PublicKey(
+export const MAR_STATE = new PublicKey(
   "8szGkuLTAux9XMgZ2vtY39jVSowEcpBfFfD8hXSEqdGC"
 );
 export const MSOL_MINT = new PublicKey(
@@ -46,5 +47,9 @@ export const MSOL_LEG_AUTH = new PublicKey(
 );
 
 export const MB_PROGRAM_ID = new PublicKey(
-  "FeNeooF8ACbHzg1k5z7FpyZcBEjYeCnGBHHcJW7qfzsR"
+  "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
+);
+
+export const MAGIC_BLOCK_PROGRAM_ID = new PublicKey(
+  "Magic11111111111111111111111111111111111111"
 );

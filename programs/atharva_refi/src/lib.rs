@@ -1,6 +1,6 @@
 #![allow(deprecated, unexpected_cfgs)]
 use anchor_lang::prelude::*;
-use ephemeral_rollups_sdk::anchor::{commit, delegate, ephemeral};
+use ephemeral_rollups_sdk::anchor::ephemeral;
 
 mod constants;
 mod errors;
@@ -13,7 +13,7 @@ mod utilities;
 use instructions::*;
 use states::ScheduleStreamArgs;
 
-declare_id!("HesZ7kke1KynNjhizTAAtRoxQZasxYqJ2oTrdw7JNkBx");
+declare_id!("5MQdy7SUtMR5qQqryuizd7WXKE18RRn7sNS4uX64ih96");
 
 #[ephemeral]
 #[program]
@@ -56,5 +56,11 @@ pub mod atharva_refi {
     }
     pub fn organization_withdraw(ctx: Context<OrganizationWithdraw>, amount: u64) -> Result<()> {
         ctx.accounts.process(amount)
+    }
+    pub fn delegate(ctx: Context<DelegatePool>) -> Result<()> {
+        delegate_process(ctx)
+    }
+    pub fn undelegate(ctx: Context<UndelegatePool>) -> Result<()> {
+        undelegate_process(ctx)
     }
 }

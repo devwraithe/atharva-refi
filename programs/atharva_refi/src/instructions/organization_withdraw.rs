@@ -1,4 +1,4 @@
-use crate::constants::{ADMIN_PUBKEY, ORG_VAULT_SEED, POOL_SEED};
+use crate::constants::{ORG_VAULT_SEED, POOL_SEED};
 use crate::errors::ErrorCode;
 use crate::states::Pool;
 use anchor_lang::prelude::*;
@@ -39,7 +39,7 @@ impl<'info> OrganizationWithdraw<'info> {
         require!(amount > 0, ErrorCode::InvalidAmount);
         require!(
             self.pool.total_deposits >= amount,
-            ErrorCode::InsufficientFunds
+            ErrorCode::InsufficientWithdrawFunds,
         );
 
         let pool = &self.pool;
