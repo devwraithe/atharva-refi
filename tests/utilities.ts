@@ -1,4 +1,11 @@
-import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
+import {
+  Keypair,
+  LAMPORTS_PER_SOL,
+  PublicKey,
+  sendAndConfirmTransaction,
+  SystemProgram,
+  Transaction,
+} from "@solana/web3.js";
 import {
   PROGRAM_ID,
   POOL_SEED,
@@ -8,8 +15,6 @@ import {
   POOL_MINT_SEED,
   LIQ_POOL_MSOL_LEG,
   LIQ_POOL_SOL_LEG,
-  M_PROGRAM_ID,
-  M_STATE,
   MSOL_LEG_AUTH,
   MSOL_MINT,
   MSOL_MINT_AUTH,
@@ -17,10 +22,72 @@ import {
   TREASURY_MSOL,
   MB_PROGRAM_ID,
   mblockPath,
+  MAGIC_BLOCK_PROGRAM_ID,
+  MAR_STATE,
+  MAR_PROGRAM_ID,
 } from "./constants";
 import fs from "fs";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { MAGIC_PROGRAM_ID } from "@magicblock-labs/ephemeral-rollups-sdk";
+import {
+  DELEGATION_PROGRAM_ID,
+  MAGIC_PROGRAM_ID,
+} from "@magicblock-labs/ephemeral-rollups-sdk";
+import * as anchor from "@coral-xyz/anchor";
+
+// Simulate wait times for rollup processing
+export async function waitForRollup(
+  durationMs: number,
+  action = "Processing"
+): Promise<void> {
+  const TICK_MS = 500;
+  const totalTicks = Math.ceil(durationMs / TICK_MS);
+
+  for (let tick = 0; tick < totalTicks; tick++) {
+    const dots = ".".repeat((tick % 3) + 1).padEnd(3, " ");
+
+    const remainingMs = Math.max(0, durationMs - tick * TICK_MS);
+    const remainingSec = (remainingMs / 1000).toFixed(1);
+
+    process.stdout.write(
+      `\r[MagicBlock] ${action}${dots} (${remainingSec}s remaining)`
+    );
+
+    await sleep(TICK_MS);
+  }
+
+  clearLine();
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function clearLine() {
+  process.stdout.write("\r\x1b[K");
+}
+
+// Mock MagicBlock program (using Atharva ReFi as donor)
+export const mockMagicBlockProgram = (svm: any) => {
+  const MAGIC_BLOCK_ID = MAGIC_BLOCK_PROGRAM_ID;
+
+  // Load my compiled program bytecode for a vaild ELF/SBF for LiteSVM
+  const donorBytecode = fs.readFileSync("./target/deploy/atharva_refi.so");
+
+  // SBF executable that returns success
+  const NO_OP_PROGRAM_SBF = Buffer.from(
+    "7f454c4601010100000000000000000002002800010000000000000000000000" +
+      "0000000000000000340000000000000000000000340020000100000000000000" +
+      "010000000000000000000000000000000000000000000000d000000000000000" +
+      "d00000000000000005000000000000000010000000000000b700000000000000" +
+      "9500000000000000",
+    "hex"
+  );
+
+  // Force-inject into LiteSVM
+  svm.addProgram(MAGIC_BLOCK_ID, NO_OP_PROGRAM_SBF);
+
+  console.log("✅ MagicBlock Crank Mocked at:", MAGIC_BLOCK_ID.toBase58());
+};
 
 // Load external account
 export function loadAccount(
@@ -51,13 +118,29 @@ export function loadAccount(
   }
 }
 
+export function loadMagicBlock(svm: any) {
+  // svm.addProgram(
+  //   MAGIC_PROGRAM_ID,
+  //   fs.readFileSync(`${mblockPath}/magic_block.so`)
+  // );
+
+  mockMagicBlockProgram(svm);
+
+  // svm.addProgram(
+  //   DELEGATION_PROGRAM_ID,
+  //   fs.readFileSync(`${mblockPath}/delegation_program.so`)
+  // );
+
+  console.log("MagicBlock accounts loaded!");
+}
+
 /**
  * Centralized loader for Marinade-related accounts in LiteSVM
  */
 export function loadMarinadeAccounts(svm: any, marinadePath: string) {
   // Mapping of constant addresses to their specific filenames and owners
   const marinadeAccounts = [
-    { address: M_STATE, file: "marinade_state.json", owner: M_PROGRAM_ID },
+    { address: MAR_STATE, file: "marinade_state.json", owner: MAR_PROGRAM_ID },
     { address: MSOL_MINT, file: "msol_mint.json", owner: TOKEN_PROGRAM_ID },
     {
       address: RESERVE_PDA,
@@ -67,7 +150,7 @@ export function loadMarinadeAccounts(svm: any, marinadePath: string) {
     {
       address: MSOL_MINT_AUTH,
       file: "msol_mint_auth.json",
-      owner: M_PROGRAM_ID,
+      owner: MAR_PROGRAM_ID,
     },
     {
       address: LIQ_POOL_SOL_LEG,
@@ -79,7 +162,11 @@ export function loadMarinadeAccounts(svm: any, marinadePath: string) {
       file: "liq_pool_msol_leg.json",
       owner: TOKEN_PROGRAM_ID,
     },
-    { address: MSOL_LEG_AUTH, file: "msol_leg_auth.json", owner: M_PROGRAM_ID },
+    {
+      address: MSOL_LEG_AUTH,
+      file: "msol_leg_auth.json",
+      owner: MAR_PROGRAM_ID,
+    },
     {
       address: TREASURY_MSOL,
       file: "treasury_msol.json",
@@ -88,10 +175,9 @@ export function loadMarinadeAccounts(svm: any, marinadePath: string) {
   ];
 
   // Load the program bytecode first
-  svm.addProgram(M_PROGRAM_ID, fs.readFileSync(`${marinadePath}/marinade.so`));
   svm.addProgram(
-    MAGIC_PROGRAM_ID,
-    fs.readFileSync(`${mblockPath}/magic_block.so`)
+    MAR_PROGRAM_ID,
+    fs.readFileSync(`${marinadePath}/marinade.so`)
   );
 
   // Iterate and load each account state
@@ -170,3 +256,54 @@ export const getPoolPdas = (
 
   return { poolPda, poolMintPda, poolVaultPda, orgVaultPda };
 };
+
+export async function fundAccount(
+  connection: anchor.web3.Connection,
+  payer: anchor.web3.Keypair,
+  toPubkey: PublicKey,
+  amountInSol: number
+) {
+  const transaction = new Transaction().add(
+    SystemProgram.transfer({
+      fromPubkey: payer.publicKey,
+      toPubkey: toPubkey,
+      lamports: amountInSol * LAMPORTS_PER_SOL,
+    })
+  );
+
+  await sendAndConfirmTransaction(connection, transaction, [payer]);
+  console.log(`✅ Transferred ${amountInSol} SOL to ${toPubkey.toBase58()}`);
+}
+
+// Show account balance
+export async function getBalance(
+  provider: anchor.Provider,
+  owner: string,
+  pubkey: PublicKey
+) {
+  const supporterBalance = await provider.connection.getBalance(pubkey);
+  console.log(
+    `${owner} Balance: ${supporterBalance} (${
+      supporterBalance / LAMPORTS_PER_SOL
+    })`
+  );
+}
+
+// Show token account balance
+export async function getTokenBalance(
+  provider: anchor.Provider,
+  ownerLabel: string,
+  tokenAccount: PublicKey
+): Promise<number> {
+  const balance = await provider.connection.getTokenAccountBalance(
+    tokenAccount
+  );
+
+  console.log(
+    `${ownerLabel} Token Balance: ${balance.value.amount} (${
+      balance.value.uiAmount ?? 0
+    })`
+  );
+
+  return balance.value.uiAmount;
+}

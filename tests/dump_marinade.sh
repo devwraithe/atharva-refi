@@ -1,20 +1,41 @@
 #!/bin/bash
+
+# ----------------------------
+# Configuration
+# ----------------------------
 MAINNET_RPC="https://api.mainnet-beta.solana.com"
 DEVNET_RPC="https://api.devnet.solana.com"
-DIR="marinade"
-MAGIC_BLOCK_DIR="magic_block"
 
-mkdir -p $DIR
-mkdir -p $MAGIC_BLOCK_DIR
+MARINADE_DIR="marinade"
+MAGIC_DIR="magic_block"
 
-echo "Dumping Program..."
-solana program dump -u $DEVNET_RPC MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD $DIR/marinade.so
+# Program IDs
+MARINADE_PROG="MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD"
+# MAGIC_PROG="Magic11111111111111111111111111111111111111"
+DELEGATION_PROG="DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
 
-echo "Dumping MagicBlock Program..."
-solana program dump -u $DEVNET_RPC Magic11111111111111111111111111111111111111 $MAGIC_BLOCK_DIR/magic_block.so
+# ----------------------------
+# Init directories
+# ----------------------------
+mkdir -p "$MARINADE_DIR" "$MAGIC_DIR"
 
+dump_program() {
+    echo "Dumping Program: $2..."
+    solana program dump -u "$MAINNET_RPC" "$1" "$2" \
+      || echo "⚠️ Failed to dump program $1 from mainnet"
+}
 
-# Define mapping: "address:filename"
+# ----------------------------
+# 1. Dump Programs (mainnet only)
+# ----------------------------
+dump_program "$MARINADE_PROG" "$MARINADE_DIR/marinade.so"
+# dump_program "$MAGIC_PROG" "$MAGIC_DIR/magic_block.so"
+dump_program "$DELEGATION_PROG" "$MAGIC_DIR/delegation_program.so"
+
+# ----------------------------
+# 2. Dump Marinade State Accounts
+# ----------------------------
+# Format: "address:filename"
 ACCOUNTS=(
   "8szGkuLTAux9XMgZ2vtY39jVSowEcpBfFfD8hXSEqdGC:marinade_state"
   "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So:msol_mint"
@@ -26,14 +47,30 @@ ACCOUNTS=(
   "EyaSjUtSgo9aRD1f8LWXwdvkpDTmXAW54yoSHZRF14WL:msol_leg_auth"
 )
 
+echo "Dumping accounts with mainnet → devnet fallback..."
+
 for item in "${ACCOUNTS[@]}"; do
-  # Split the string by the colon
   ADDR="${item%%:*}"
   NAME="${item#*:}"
-  
-  echo "Dumping $NAME ($ADDR)..."
-  solana account -u $DEVNET_RPC $ADDR --commitment confirmed --output json > "$DIR/$NAME.json"
-  sleep 1 
+  OUT="$MARINADE_DIR/$NAME.json"
+
+  echo "Processing $NAME ($ADDR)..."
+
+  # Try mainnet first
+  if solana account -u "$MAINNET_RPC" "$ADDR" --output json > "$OUT" 2>/dev/null; then
+    echo "  ✅ Found on mainnet"
+  else
+    echo "  ⚠️ Not found on mainnet, trying devnet..."
+
+    if solana account -u "$DEVNET_RPC" "$ADDR" --output json > "$OUT" 2>/dev/null; then
+      echo "  ✅ Found on devnet"
+    else
+      echo "  ❌ Not found on mainnet or devnet"
+      rm -f "$OUT"
+    fi
+  fi
+
+  sleep 0.5
 done
 
-echo "Done! Files created in $DIR"
+echo "✅ Done! Files organized in $MARINADE_DIR and $MAGIC_DIR"

@@ -1,18 +1,18 @@
-use crate::constants::{ADMIN_PUBKEY, POOL_SEED, POOL_VAULT_SEED};
-use crate::errors::ErrorCode;
+use crate::constants::{POOL_SEED, POOL_VAULT_SEED};
 use crate::marinade::{marinade_liquid_stake, LiquidStakeAccounts};
 use crate::states::Pool;
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-// Stake supporter deposits from pool to marinade
+/// Stake supporter deposits from pool to marinade
+/// Pool vault immediately stakes on marinade and creates
+/// the pool_msol_account to hold mSOL
 
 #[derive(Accounts)]
 pub struct Stake<'info> {
-    #[account(mut)]
-    pub signer: Signer<'info>,
-
+    // #[account(mut)]
+    // pub signer: Signer<'info>,
     #[account(
         mut,
         seeds = [
@@ -59,7 +59,7 @@ pub struct Stake<'info> {
             pool.organization_pubkey.as_ref(),
             &pool.new_species_id,
         ],
-        bump,
+        bump = pool.pool_vault_bump,
     )]
     pub pool_vault: SystemAccount<'info>,
 
@@ -67,7 +67,7 @@ pub struct Stake<'info> {
     /// Equivalent to Marinade's `mint_to`
     #[account(
         init_if_needed,
-        payer = signer, // Org pays for the mSOL account rent
+        payer = pool_vault,
         associated_token::mint = msol_mint,
         associated_token::authority = pool_vault,
     )]
@@ -91,12 +91,6 @@ impl<'info> Stake<'info> {
     /// Manually constructs the Marinade deposit instruction
     pub fn process(&self, amount: u64) -> Result<()> {
         msg!("Staking SOL on Marinade...");
-
-        // Only allow the designated organization or the admin to trigger staking
-        require!(
-            self.signer.key() == self.pool.organization_pubkey || self.signer.key() == ADMIN_PUBKEY,
-            ErrorCode::StakingUnauthorized
-        );
 
         let pool = &self.pool;
 

@@ -2,7 +2,6 @@ use crate::constants::{MARINADE_PROGRAM_ID, MIN_YIELD_AMOUNT, ORG_VAULT_SEED, OR
 use crate::errors::ErrorCode;
 use crate::events::YieldStreamed;
 use crate::marinade::{marinade_liquid_unstake, LiquidUnstakeAccounts};
-use crate::states::MarinadeState;
 use crate::{
     constants::{POOL_SEED, POOL_VAULT_SEED},
     states::Pool,
@@ -11,15 +10,10 @@ use anchor_lang::prelude::*;
 use anchor_lang::system_program::{transfer, Transfer};
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-/// Stream 20% of yields to organization vault
-
 #[derive(Accounts)]
 pub struct Stream<'info> {
-    /// Optional signer used for manual overrides
-    /// If None, the instruction must be authorized by pool_vault PDA
-    #[account(mut)]
-    pub authority: Option<Signer<'info>>,
-
+    // #[account(mut)]
+    // pub auth: Signer<'info>,
     #[account(
         mut,
         seeds = [
@@ -28,33 +22,8 @@ pub struct Stream<'info> {
             &pool.new_species_id
         ],
         bump = pool.pool_bump,
-        constraint = pool.is_active @ ErrorCode::PoolNotActive,
     )]
     pub pool: Account<'info, Pool>,
-
-    /// Signs burn CPI and receives SOL from unstake
-    /// Must be authority of `get_msol_from`
-    /// Used for recieving SOL - `transfer_sol_to`
-    /// CHECK: Used as a signer and other things
-    #[account(
-        mut,
-        seeds = [
-            POOL_VAULT_SEED.as_bytes(),
-            pool.organization_pubkey.as_ref(),
-            &pool.new_species_id
-        ],
-        bump = pool.pool_vault_bump,
-        constraint = (pool_vault.is_signer || (authority.is_some() && authority.as_ref().unwrap().key() == pool.organization_pubkey)) @ ErrorCode::UnauthorizedStream,
-    )]
-    pub pool_vault: AccountInfo<'info>,
-
-    /// mSOL token account to burn from
-    /// Equivalent of `get_msol_from`
-    #[account(
-        mut,
-        constraint = pool_msol_account.owner == pool_vault.key() @ ErrorCode::InvalidMsolAccount,
-    )]
-    pub pool_msol_account: Account<'info, TokenAccount>,
 
     #[account(
         mut,
@@ -67,7 +36,6 @@ pub struct Stream<'info> {
     )]
     pub organization_vault: SystemAccount<'info>,
 
-    /// Marinade state account
     /// CHECK: Verified by Marinade program
     #[account(mut)]
     pub marinade_state: AccountInfo<'info>,
@@ -76,26 +44,47 @@ pub struct Stream<'info> {
     pub msol_mint: Account<'info, Mint>,
 
     /// Vault to receive SOL from unstake
-    /// CHECK: Validated by Marinade program
+    /// CHECK: PDA derived and validated by Marinade
     #[account(mut)]
     pub liq_pool_sol_leg: AccountInfo<'info>,
 
-    /// CHECK: Validated by Marinade program
+    /// CHECK: Owned and validated by Marinade
     #[account(mut)]
-    pub liq_pool_msol_leg: Account<'info, TokenAccount>,
+    pub liq_pool_msol_leg: AccountInfo<'info>,
 
     /// Holds mSOL backing SOL
-    /// CHECK: Validated by Marinade program
+    /// CHECK: Verified by Marinade program
     #[account(mut)]
-    pub treasury_msol_account: Account<'info, TokenAccount>,
+    pub treasury_msol_account: AccountInfo<'info>,
+
+    /// mSOL token account to burn from
+    /// Equivalent of `get_msol_from`
+    /// CHECK: Verified by Marinade program
+    #[account(mut)]
+    pub pool_msol_account: Account<'info, TokenAccount>,
+
+    /// Signs burn CPI and receives SOL from unstake
+    /// Must be authority of `get_msol_from`
+    /// Used for recieving SOL - `transfer_sol_to`
+    /// CHECK: Verified by Marinade program
+    #[account(
+        mut,
+        seeds = [
+            POOL_VAULT_SEED.as_bytes(),
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id
+        ],
+        bump = pool.pool_vault_bump,
+    )]
+    pub pool_vault: SystemAccount<'info>,
 
     pub system_program: Program<'info, System>,
 
     pub token_program: Program<'info, Token>,
 
-    /// CHECK: Manual check of the program ID
+    /// CHECK: Marinade program
     #[account(address = MARINADE_PROGRAM_ID)]
-    pub marinade_finance_program: AccountInfo<'info>,
+    pub marinade_program: AccountInfo<'info>,
 }
 impl<'info> Stream<'info> {
     pub fn process(&mut self) -> Result<()> {
@@ -111,22 +100,37 @@ impl<'info> Stream<'info> {
         let msol_to_unstake = self.sol_to_msol(org_yield_sol)?;
 
         msg!(
-            "Streaming {} SOL (20% of {} total yield)",
+            "Streaming {} mSOL (≈{} SOL, 20% of {} total yield)",
+            msol_to_unstake,
             org_yield_sol,
             total_yield
         );
 
+        // Get pool vault balance before unstaking
+        let vault_balance_before = self.pool_vault.lamports();
+
         // Execute yield distribution
         self.unstake_msol(msol_to_unstake)?;
-        self.transfer_to_org(org_yield_sol)?;
-        self.update_checkpoint(current_sol_value, org_yield_sol)?;
+
+        // Get pool vault balance after unstaking to see actual SOL received
+        let vault_balance_after = self.pool_vault.lamports();
+        let actual_sol_received = vault_balance_after.saturating_sub(vault_balance_before);
+
+        msg!(
+            "Actually received {} SOL from unstaking",
+            actual_sol_received
+        );
+
+        // Transfer the ACTUAL amount received, not the calculated amount
+        self.transfer_to_org(actual_sol_received)?;
+        self.update_checkpoint(current_sol_value, actual_sol_received)?;
 
         emit!(YieldStreamed {
             pool: self.pool.key(),
             organization: self.pool.organization_pubkey,
-            total_yield: total_yield,
-            org_amount: org_yield_sol,
-            pool_amount: total_yield - org_yield_sol,
+            total_yield,
+            org_amount: actual_sol_received,
+            pool_amount: total_yield.saturating_sub(actual_sol_received),
             timestamp: current_time,
         });
 
@@ -140,7 +144,6 @@ impl<'info> Stream<'info> {
         }
 
         let data = self.marinade_state.try_borrow_data()?;
-        // Offsets for Marinade Mainnet: msol_supply (368), total_virtual_staked (376)
         let msol_supply = u64::from_le_bytes(data[368..376].try_into().unwrap());
         let total_virtual_staked = u64::from_le_bytes(data[376..384].try_into().unwrap());
 
@@ -182,14 +185,15 @@ impl<'info> Stream<'info> {
     }
 
     fn unstake_msol(&self, msol_amount: u64) -> Result<()> {
-        let pool_key = self.pool.key();
-        let vault_seeds = &[
+        let pool = &self.pool;
+
+        let seeds = &[
             POOL_VAULT_SEED.as_bytes(),
-            pool_key.as_ref(),
-            self.pool.organization_pubkey.as_ref(),
-            &[self.pool.pool_vault_bump],
+            pool.organization_pubkey.as_ref(),
+            &pool.new_species_id,
+            &[pool.pool_vault_bump],
         ];
-        let signer_seeds = &[&vault_seeds[..]];
+        let signer_seeds = &[&seeds[..]];
 
         marinade_liquid_unstake(
             msol_amount,
@@ -215,10 +219,10 @@ impl<'info> Stream<'info> {
         let seeds = &[
             POOL_VAULT_SEED.as_bytes(),
             self.pool.organization_pubkey.as_ref(),
-            self.pool.species_id.as_bytes(),
+            &self.pool.new_species_id,
             &[self.pool.pool_vault_bump],
         ];
-        let signer = &[&seeds[..]];
+        let signer_seeds = &[&seeds[..]];
 
         transfer(
             CpiContext::new_with_signer(
@@ -227,7 +231,7 @@ impl<'info> Stream<'info> {
                     from: self.pool_vault.to_account_info(),
                     to: self.organization_vault.to_account_info(),
                 },
-                signer,
+                signer_seeds,
             ),
             amount,
         )

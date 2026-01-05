@@ -1,4 +1,4 @@
-use anchor_lang::solana_program::hash;
+use solana_program::hash;
 
 pub fn calculate_ix_discriminator(ix_name: &str) -> Vec<u8> {
     // "global:" prefix for instructions

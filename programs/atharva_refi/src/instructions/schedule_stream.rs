@@ -1,4 +1,4 @@
-use anchor_lang::{prelude::*, InstructionData};
+use anchor_lang::prelude::*;
 
 use anchor_lang::solana_program::{
     instruction::{AccountMeta, Instruction},
@@ -8,26 +8,24 @@ use anchor_spl::token::{Mint, Token, TokenAccount};
 use ephemeral_rollups_sdk::consts::MAGIC_PROGRAM_ID;
 use magicblock_magic_program_api::{args::ScheduleTaskArgs, instruction::MagicBlockInstruction};
 
-use crate::constants::{MARINADE_PROGRAM_ID, ORG_VAULT_SEED, POOL_SEED, POOL_VAULT_SEED, STREAM_INTERVAL_MS};
+use crate::constants::{
+    MARINADE_PROGRAM_ID, ORG_VAULT_SEED, POOL_SEED, POOL_VAULT_SEED, STREAM_INTERVAL_MS,
+};
 use crate::errors::ErrorCode;
 use crate::states::{Pool, ScheduleStreamArgs};
 
 /// Schedules automated yield streaming via MagicBlock Cranks
 /// Crank calls Stream instruction every 2 days to distribute yields
 ///
-/// The crank will periodically call stream_yields instruction to:
+/// The crank will periodically call `stream` instruction to:
 /// - Calculate accumulated yield from Marinade staking
-/// - Distribute org's percentage to organization vault
+/// - Distribute organization's percentage to their vault
 /// - Keep remainder in pool for supporters
 
 #[derive(Accounts)]
 pub struct ScheduleStream<'info> {
-    #[account(
-        mut, 
-        // constraint = authority.key() == pool.organization_pubkey,
-    )]
+    #[account(mut)]
     pub authority: Signer<'info>,
-
     #[account(
         mut,
         seeds = [
@@ -48,7 +46,7 @@ pub struct ScheduleStream<'info> {
             pool.organization_pubkey.as_ref(),
             &pool.new_species_id,
         ],
-        bump,
+        bump = pool.pool_vault_bump,
     )]
     pub pool_vault: SystemAccount<'info>,
 
@@ -63,17 +61,13 @@ pub struct ScheduleStream<'info> {
     )]
     pub organization_vault: SystemAccount<'info>,
 
-    /// Marinade state account
-    /// CHECK: We use AccountInfo to avoid the ownership check against our own program ID.
-    /// Validation is handled by the Marinade program during CPI.
+    /// CHECK: Validate by Marinade program
     #[account(mut)]
     pub marinade_state: AccountInfo<'info>,
-    // pub marinade_state: Account<'info, MarinadeState>,
 
     #[account(mut)]
     pub msol_mint: Account<'info, Mint>,
 
-    /// Vault to receive SOL from unstake
     /// CHECK: Validated by Marinade program
     #[account(mut)]
     pub liq_pool_sol_leg: AccountInfo<'info>,
@@ -82,8 +76,7 @@ pub struct ScheduleStream<'info> {
     #[account(mut)]
     pub liq_pool_msol_leg: Account<'info, TokenAccount>,
 
-    /// Holds mSOL backing SOL
-    /// CHECK: Validated by Marinade program
+    /// CHECK: Validated by Marinade program. Holds mSOl backing SOL
     #[account(mut)]
     pub treasury_msol_account: Account<'info, TokenAccount>,
 
@@ -91,15 +84,15 @@ pub struct ScheduleStream<'info> {
 
     pub token_program: Program<'info, Token>,
 
-    /// CHECK: Manual check of the program ID
+    /// CHECK: Only Marinade program ID can be passed
     #[account(address = MARINADE_PROGRAM_ID)]
     pub marinade_program: AccountInfo<'info>,
 
-    /// CHECK: used for CPI
-    #[account()]
+    /// CHECK: used for MagicBlock program CPI
+    #[account(address = MAGIC_PROGRAM_ID)]
     pub magic_program: AccountInfo<'info>,
 
-    /// CHECK: used for CPI
+    /// CHECK: used for Atharva ReFi CPI
     pub program: AccountInfo<'info>,
 }
 impl<'info> ScheduleStream<'info> {
@@ -111,26 +104,25 @@ impl<'info> ScheduleStream<'info> {
         );
         require!(args.iterations > 0, ErrorCode::InvalidIterations);
 
-        // Update pool state to track scheduling
+        // Update pool state
         self.pool.is_crank_scheduled = true;
         self.pool.last_stream_ts = Clock::get()?.unix_timestamp as u64;
 
-        // Build the stream instruction that the crank will call
-        let stream_ix = self.build_stream_yields_instruction()?;
+        // Build stream instruction for cranking
+        let stream_ix = self.build_stream_ix()?;
 
         // Serialize MagicBlock Task Args
-        let schedule_args = ScheduleTaskArgs {
+        let ix_data = bincode::serialize(&MagicBlockInstruction::ScheduleTask(ScheduleTaskArgs {
             task_id: args.task_id,
             execution_interval_millis: args.execution_interval_millis,
             iterations: args.iterations,
             instructions: vec![stream_ix],
-        };
-        let ix_data = bincode::serialize(&MagicBlockInstruction::ScheduleTask(schedule_args))
-            .map_err(|_| ErrorCode::SerializationError)?;
+        }))
+        .map_err(|_| ErrorCode::SerializationError)?;
 
-        // Create the MagicBlock schedule instruction
+        // Create the schedule instruction for CPI
         let schedule_ix = Instruction::new_with_bytes(
-            MAGIC_PROGRAM_ID,
+            self.magic_program.key(),
             &ix_data,
             vec![
                 AccountMeta::new(self.pool_vault.key(), true),
@@ -138,14 +130,11 @@ impl<'info> ScheduleStream<'info> {
             ],
         );
 
-        let pool = &self.pool;
-
-        // Invoke Magic Program
         let seeds = &[
             POOL_VAULT_SEED.as_bytes(),
-            pool.organization_pubkey.as_ref(),
-            &pool.new_species_id,
-            &[pool.pool_vault_bump],
+            self.pool.organization_pubkey.as_ref(),
+            &self.pool.new_species_id,
+            &[self.pool.pool_vault_bump],
         ];
         let signer_seeds = &[&seeds[..]];
 
@@ -154,7 +143,6 @@ impl<'info> ScheduleStream<'info> {
             &[
                 self.pool_vault.to_account_info(),
                 self.pool.to_account_info(),
-                self.magic_program.to_account_info(),
             ],
             signer_seeds,
         )?;
@@ -169,9 +157,7 @@ impl<'info> ScheduleStream<'info> {
         Ok(())
     }
 
-    /// Builds the stream_yields instruction with all required accounts
-    fn build_stream_yields_instruction(&self) -> Result<Instruction> {
-        // Get associated mSOL token account
+    fn build_stream_ix(&self) -> Result<Instruction> {
         let pool_msol_account = anchor_spl::associated_token::get_associated_token_address(
             &self.pool_vault.key(),
             &self.msol_mint.key(),
@@ -193,7 +179,7 @@ impl<'info> ScheduleStream<'info> {
                 AccountMeta::new_readonly(self.token_program.key(), false),
                 AccountMeta::new_readonly(self.system_program.key(), false),
             ],
-            data: crate::instruction::Stream {}.data(),
+            data: anchor_lang::InstructionData::data(&crate::instruction::Stream {}),
         })
     }
 }

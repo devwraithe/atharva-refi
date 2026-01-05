@@ -19,7 +19,6 @@ pub struct Unstake<'info> {
     )]
     pub pool: Account<'info, Pool>,
 
-    /// Marinade state account
     /// CHECK: Verified by Marinade program
     #[account(mut)]
     pub marinade_state: AccountInfo<'info>,
@@ -58,7 +57,7 @@ pub struct Unstake<'info> {
             pool.organization_pubkey.as_ref(),
             &pool.new_species_id,
         ],
-        bump,
+        bump = pool.pool_vault_bump,
     )]
     pub pool_vault: SystemAccount<'info>,
 

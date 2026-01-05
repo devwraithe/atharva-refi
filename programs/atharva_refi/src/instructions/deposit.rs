@@ -93,6 +93,8 @@ impl<'info> Deposit<'info> {
 
         system_program::transfer(transfer_cpi_ctx, amount)?;
 
+        msg!("Deposited {} lamports to pool vault", amount);
+
         // Mint receipt tokens for supporter
         let seeds = &[
             POOL_SEED.as_bytes(),
@@ -117,12 +119,24 @@ impl<'info> Deposit<'info> {
 
         mint_to(mint_cpi_ctx, amount)?;
 
+        msg!("Minted {} receipt tokens to supporter", amount);
+
         // Emit event
         emit!(SupporterDeposited {
             organization_pubkey: self.pool.organization_pubkey,
             species_name: self.pool.species_name.clone(),
             amount,
         });
+
+        msg!("Supporter Balance: {}", self.supporter.lamports());
+        msg!("Pool Vault Balance: {}", self.pool_vault.lamports());
+
+        self.supporter_pool_token_account.reload()?;
+
+        msg!(
+            "Supporter Token Account Balance: {}",
+            self.supporter_pool_token_account.amount
+        );
 
         Ok(())
     }

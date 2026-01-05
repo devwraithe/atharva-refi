@@ -1,17 +1,21 @@
 pub mod create_pool;
+pub mod delegate;
 pub mod deposit;
 pub mod organization_withdraw;
-pub mod schedule_streams;
+pub mod schedule_stream;
 pub mod stake;
 pub mod stream;
 pub mod supporter_withdraw;
+pub mod undelegate;
 pub mod unstake;
 
 pub use create_pool::*;
+pub use delegate::*;
 pub use deposit::*;
 pub use organization_withdraw::*;
-pub use schedule_streams::*;
+pub use schedule_stream::*;
 pub use stake::*;
 pub use stream::*;
 pub use supporter_withdraw::*;
+pub use undelegate::*;
 pub use unstake::*;

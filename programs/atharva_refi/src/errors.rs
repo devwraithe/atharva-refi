@@ -19,6 +19,8 @@ pub enum ErrorCode {
     PoolNotActive,
     #[msg("Not enough SOL to deposit")]
     InsufficientFunds,
+    #[msg("Not enough SOL to withdraw")]
+    InsufficientWithdrawFunds,
     #[msg("Invalid amount")]
     InvalidAmount,
     #[msg("Amount is too small")]
