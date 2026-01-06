@@ -15,7 +15,7 @@ atharva_refi = "5MQdy7SUtMR5qQqryuizd7WXKE18RRn7sNS4uX64ih96"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "devnet"
+cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

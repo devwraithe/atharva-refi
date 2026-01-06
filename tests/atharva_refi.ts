@@ -3,11 +3,15 @@ import { BN, Program } from "@coral-xyz/anchor";
 import { AtharvaRefi } from "../target/types/atharva_refi";
 import { Keypair, LAMPORTS_PER_SOL, SystemProgram } from "@solana/web3.js";
 import {
+  fetchBalance,
+  fetchTokenBalance,
   fundAccount,
-  getBalance,
   getOrCreateAdminWallet,
   getPoolPdas,
-  getTokenBalance,
+  lamportsToSol,
+  logData,
+  logDone,
+  logSignature,
   stringToBytes,
 } from "./utilities";
 import {
@@ -28,6 +32,7 @@ import {
   TREASURY_MSOL,
 } from "./constants";
 import { MAGIC_PROGRAM_ID } from "@magicblock-labs/ephemeral-rollups-sdk";
+import { expect } from "chai";
 
 describe("atharva refi protocol", () => {
   const provider = anchor.AnchorProvider.env();
@@ -53,10 +58,15 @@ describe("atharva refi protocol", () => {
   let organization: Keypair;
   let supporterPoolTokenAccount: anchor.web3.PublicKey;
   let poolMsolAccount: anchor.web3.PublicKey;
+  let poolPda: anchor.web3.PublicKey;
+  let poolMintPda: anchor.web3.PublicKey;
+  let poolVaultPda: anchor.web3.PublicKey;
+  let orgVaultPda: anchor.web3.PublicKey;
 
   const ORGANIZATION_NAME = "Londolozi Reserve";
   const SPECIES_NAME = "African Lion";
   const SPECIES_ID = "panthera_leo";
+  const SPECIES_ID_BYTES = stringToBytes(SPECIES_ID, 32);
 
   const DEPOSIT_AMOUNT = 0.1;
   const STAKE_AMOUNT = 0.05;
@@ -74,32 +84,16 @@ describe("atharva refi protocol", () => {
     supporter = Keypair.generate();
     organization = Keypair.generate();
 
-    await fundAccount(
-      provider.connection,
-      provider.wallet.payer,
-      admin.publicKey,
-      0.05
-    );
-    await fundAccount(
-      provider.connection,
-      provider.wallet.payer,
-      organization.publicKey,
-      0.01
-    );
-    await fundAccount(
-      provider.connection,
-      provider.wallet.payer,
-      supporter.publicKey,
-      0.15
-    );
-  });
+    const payer = provider.wallet.payer;
+    await fundAccount(provider.connection, payer, admin.publicKey, 0.05);
+    await fundAccount(provider.connection, payer, supporter.publicKey, 0.15);
+    await fundAccount(provider.connection, payer, organization.publicKey, 0.01);
 
-  it("creates a lion conservation pool", async () => {
-    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
-    const { poolPda, poolMintPda, poolVaultPda, orgVaultPda } = getPoolPdas(
-      organization.publicKey,
-      speciesIdBytes
-    );
+    const pdas = getPoolPdas(organization.publicKey, SPECIES_ID_BYTES);
+    poolPda = pdas.poolPda;
+    poolMintPda = pdas.poolMintPda;
+    poolVaultPda = pdas.poolVaultPda;
+    orgVaultPda = pdas.orgVaultPda;
 
     poolMsolAccount = getAssociatedTokenAddressSync(
       MSOL_MINT,
@@ -107,12 +101,19 @@ describe("atharva refi protocol", () => {
       true
     );
 
-    const tx = await program.methods
+    supporterPoolTokenAccount = getAssociatedTokenAddressSync(
+      poolMintPda,
+      supporter.publicKey
+    );
+  });
+
+  it("creates a lion conservation pool", async () => {
+    const txn = await program.methods
       .createPool(
         ORGANIZATION_NAME,
         organization.publicKey,
         SPECIES_NAME,
-        speciesIdBytes
+        SPECIES_ID_BYTES
       )
       .accountsStrict({
         admin: admin.publicKey,
@@ -128,22 +129,27 @@ describe("atharva refi protocol", () => {
       })
       .transaction();
 
-    await provider.sendAndConfirm(tx, [admin]);
+    const signature = await provider.sendAndConfirm(txn, [admin]);
+    logSignature("Create Pool", signature);
+
+    const pool = await program.account.pool.fetch(poolPda);
+    expect(pool.organizationPubkey).to.eql(organization.publicKey);
+    expect(pool.speciesName).to.eql(SPECIES_NAME);
+    expect(pool.speciesId).to.eql(SPECIES_ID);
+    expect(pool.isActive).to.be.true;
+    expect(pool.totalDeposits.toNumber()).to.eql(0);
+
+    logData(`Organization: ${pool.organizationName}`);
+    logData(`Species Name: ${pool.speciesName}`);
+    logData(`Species ID: ${pool.speciesId}`);
+
+    logDone(`${pool.organizationName} ${pool.speciesName} Pool Created!`);
   });
 
   it("deposits SOL into the pool", async () => {
-    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
-    const { poolPda, poolMintPda, poolVaultPda } = getPoolPdas(
-      organization.publicKey,
-      speciesIdBytes
-    );
+    const poolBefore = await program.account.pool.fetch(poolPda);
 
-    supporterPoolTokenAccount = getAssociatedTokenAddressSync(
-      poolMintPda,
-      supporter.publicKey
-    );
-
-    const tx = await program.methods
+    const txn = await program.methods
       .deposit(new BN(DEPOSIT_AMOUNT * LAMPORTS_PER_SOL))
       .accountsStrict({
         supporter: supporter.publicKey,
@@ -157,19 +163,43 @@ describe("atharva refi protocol", () => {
       })
       .transaction();
 
-    await provider.sendAndConfirm(tx, [supporter]);
+    const signature = await provider.sendAndConfirm(txn, [supporter]);
+    logSignature("Deposit", signature);
 
-    getBalance(provider, "Pool Vault", poolVaultPda);
+    const supporterBalance = await fetchBalance(provider, supporter.publicKey);
+    const poolVaultBalance = await fetchBalance(provider, poolVaultPda);
+    const supporterPoolTokenBal = await fetchTokenBalance(
+      provider,
+      supporterPoolTokenAccount
+    );
+
+    const poolAfter = await program.account.pool.fetch(poolPda);
+    expect(poolAfter.totalDeposits.toNumber()).to.above(
+      poolBefore.totalDeposits.toNumber()
+    );
+    expect(poolAfter.totalShares.toNumber()).to.above(
+      poolBefore.totalShares.toNumber()
+    );
+
+    logData(`Supporter Balance: ${supporterBalance} SOL`);
+    logData(`Pool Vault Balance: ${poolVaultBalance} SOL`);
+    logData(`Supporter Token Balance: ${supporterPoolTokenBal} ARFI`);
+    logData(
+      `Pool Total Deposits: ${lamportsToSol(
+        poolAfter.totalDeposits.toNumber()
+      )} SOL`
+    );
+    logData(
+      `Pool Total Shares: ${lamportsToSol(
+        poolAfter.totalShares.toNumber()
+      )} ARFI`
+    );
+
+    logDone(`Supporter deposited ${DEPOSIT_AMOUNT} SOL into pool!`);
   });
 
   it("stakes SOL on Marinade and receives mSOL", async () => {
-    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
-    const { poolPda, poolVaultPda } = getPoolPdas(
-      organization.publicKey,
-      speciesIdBytes
-    );
-
-    const tx = await program.methods
+    const txn = await program.methods
       .stake(new BN(STAKE_AMOUNT * LAMPORTS_PER_SOL))
       .accountsStrict({
         pool: poolPda,
@@ -189,19 +219,26 @@ describe("atharva refi protocol", () => {
       })
       .transaction();
 
-    await provider.sendAndConfirm(tx, []);
+    const signature = await provider.sendAndConfirm(txn, []);
+    logSignature("Stake", signature);
 
-    getTokenBalance(provider, "Pool mSOL", poolMsolAccount);
+    const poolVaultBalance = await fetchBalance(provider, poolVaultPda);
+    const poolMsolBalance = await fetchTokenBalance(provider, poolMsolAccount);
+
+    logData(`Pool Vault Balance: ${poolVaultBalance} SOL`);
+    logData(`Pool mSOL Balance: ${poolMsolBalance.toFixed(2)} mSOL`);
+
+    logDone(
+      `Pool staked ${STAKE_AMOUNT} SOL and received ${poolMsolBalance.toFixed(
+        2
+      )} mSOL!`
+    );
   });
 
   it("streams yield to organization vault", async () => {
-    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
-    const { poolPda, poolVaultPda, orgVaultPda } = getPoolPdas(
-      organization.publicKey,
-      speciesIdBytes
-    );
+    const orgBalanceBefore = await fetchBalance(provider, orgVaultPda);
 
-    const tx = await program.methods
+    const txn = await program.methods
       .stream()
       .accountsStrict({
         pool: poolPda,
@@ -219,16 +256,22 @@ describe("atharva refi protocol", () => {
       })
       .transaction();
 
-    await provider.sendAndConfirm(tx, []);
+    const signature = await provider.sendAndConfirm(txn, []);
+    logSignature("Stream", signature);
 
-    getBalance(provider, "Organization Vault", orgVaultPda);
+    const orgBalanceAfter = await fetchBalance(provider, orgVaultPda);
+    const streamed = orgBalanceAfter - orgBalanceBefore;
+
+    logData(
+      `Organization Vault Balance: ${lamportsToSol(orgBalanceAfter)} SOL`
+    );
+    logData(`Streamed Amount: ${streamed.toFixed(4)} SOL`);
+
+    logDone(`Streamed ${streamed.toFixed(4)} SOL to organization vault!`);
   });
 
   it("delegates pool to ephemeral rollups", async () => {
-    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
-    const { poolPda } = getPoolPdas(organization.publicKey, speciesIdBytes);
-
-    const tx = await program.methods
+    const txn = await program.methods
       .delegate()
       .accountsPartial({
         payer: admin.publicKey,
@@ -236,20 +279,18 @@ describe("atharva refi protocol", () => {
       })
       .transaction();
 
-    await provider.sendAndConfirm(tx, [admin]);
+    const signature = await provider.sendAndConfirm(txn, [admin]);
+    logSignature("Delegate", signature);
+
     await new Promise((resolve) => setTimeout(resolve, DELEGATION_WAIT_MS));
+
+    logDone("Pool delegated to ephemeral rollups!");
   });
 
   it("schedules automatic yield streaming", async () => {
-    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
-    const { poolPda, poolVaultPda, orgVaultPda } = getPoolPdas(
-      organization.publicKey,
-      speciesIdBytes
-    );
-
     const orgBalanceBefore = await provider.connection.getBalance(orgVaultPda);
 
-    const tx = await program.methods
+    const txn = await program.methods
       .scheduleStreams({
         taskId: new BN(1),
         executionIntervalMillis: new BN(STREAM_TEST_INTERVAL_MS),
@@ -273,39 +314,48 @@ describe("atharva refi protocol", () => {
       })
       .transaction();
 
-    tx.feePayer = admin.publicKey;
-    tx.recentBlockhash = (
+    txn.feePayer = admin.publicKey;
+    txn.recentBlockhash = (
       await providerER.connection.getLatestBlockhash()
     ).blockhash;
-    tx.sign(admin);
+    txn.sign(admin);
 
     const signature = await providerER.connection.sendRawTransaction(
-      tx.serialize(),
+      txn.serialize(),
       { skipPreflight: true }
     );
     await providerER.connection.confirmTransaction(signature);
+    logSignature("Schedule Streams", signature);
 
     await new Promise((resolve) => setTimeout(resolve, STREAM_WAIT_MS));
 
-    const orgBalanceAfter = await provider.connection.getBalance(orgVaultPda);
-    const streamed = orgBalanceAfter - orgBalanceBefore;
-
-    console.log(`1st Streamed: ${streamed / LAMPORTS_PER_SOL} SOL`);
-    getBalance(provider, "Organization Vault", orgVaultPda);
-
-    const orgBalanceAfter2 = await providerER.connection.getBalance(
+    const orgBalanceAfterBase = await provider.connection.getBalance(
       orgVaultPda
     );
-    console.log(
-      `2nd Org Balance After: ${orgBalanceAfter2 / LAMPORTS_PER_SOL} SOL`
+    const orgBalanceAfterER = await providerER.connection.getBalance(
+      orgVaultPda
+    );
+    const streamedBase = orgBalanceAfterBase - orgBalanceBefore;
+    const streamedER = orgBalanceAfterER - orgBalanceBefore;
+
+    logData(`Streamed (Base Layer): ${lamportsToSol(streamedBase)} SOL`);
+    logData(`Streamed (ER): ${lamportsToSol(streamedER)} SOL`);
+    logData(
+      `Organization Vault Balance (Base): ${lamportsToSol(
+        orgBalanceAfterBase
+      )} SOL`
+    );
+    logData(
+      `Organization Vault Balance (ER): ${lamportsToSol(orgBalanceAfterER)} SOL`
+    );
+
+    logDone(
+      `Scheduled ${SCHEDULE_ITERATIONS} streaming iterations on ephemeral rollup!`
     );
   });
 
   it("undelegates pool from ephemeral rollups", async () => {
-    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
-    const { poolPda } = getPoolPdas(organization.publicKey, speciesIdBytes);
-
-    const tx = await program.methods
+    const txn = await program.methods
       .undelegate()
       .accounts({
         payer: admin.publicKey,
@@ -313,31 +363,35 @@ describe("atharva refi protocol", () => {
       })
       .transaction();
 
-    tx.feePayer = admin.publicKey;
-    tx.recentBlockhash = (
+    txn.feePayer = admin.publicKey;
+    txn.recentBlockhash = (
       await providerER.connection.getLatestBlockhash()
     ).blockhash;
-    tx.sign(admin);
+    txn.sign(admin);
 
     const signature = await providerER.connection.sendRawTransaction(
-      tx.serialize(),
+      txn.serialize(),
       { skipPreflight: true }
     );
     await providerER.connection.confirmTransaction(signature);
+    logSignature("Undelegate", signature);
 
     await new Promise((resolve) => setTimeout(resolve, UNDELEGATION_WAIT_MS));
 
-    await program.account.pool.fetch(poolPda);
+    const pool = await program.account.pool.fetch(poolPda);
+    expect(pool).to.exist;
+
+    logDone("Pool undelegated from ephemeral rollups!");
   });
 
   it("unstakes mSOL on Marinade and receives SOL", async () => {
-    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
-    const { poolPda, poolVaultPda } = getPoolPdas(
-      organization.publicKey,
-      speciesIdBytes
+    const poolVaultBalanceBefore = await fetchBalance(provider, poolVaultPda);
+    const poolMsolBalanceBefore = await fetchTokenBalance(
+      provider,
+      poolMsolAccount
     );
 
-    const tx = await program.methods
+    const txn = await program.methods
       .unstake(new BN(UNSTAKE_AMOUNT * LAMPORTS_PER_SOL))
       .accountsStrict({
         pool: poolPda,
@@ -354,19 +408,39 @@ describe("atharva refi protocol", () => {
       })
       .transaction();
 
-    await provider.sendAndConfirm(tx, []);
+    const signature = await provider.sendAndConfirm(txn, []);
+    logSignature("Unstake", signature);
 
-    getBalance(provider, "Pool Vault", poolVaultPda);
+    const poolVaultBalanceAfter = await fetchBalance(provider, poolVaultPda);
+    const poolMsolBalanceAfter = await fetchTokenBalance(
+      provider,
+      poolMsolAccount
+    );
+
+    logData(`Pool Vault Balance: ${poolVaultBalanceAfter} SOL`);
+    logData(`Pool mSOL Balance: ${poolMsolBalanceAfter.toFixed(2)} mSOL`);
+    logData(
+      `SOL Received: ${(poolVaultBalanceAfter - poolVaultBalanceBefore).toFixed(
+        4
+      )} SOL`
+    );
+    logData(
+      `mSOL Burned: ${(poolMsolBalanceBefore - poolMsolBalanceAfter).toFixed(
+        2
+      )} mSOL`
+    );
+
+    logDone(
+      `Unstaked ${UNSTAKE_AMOUNT} mSOL and received ${(
+        poolVaultBalanceAfter - poolVaultBalanceBefore
+      ).toFixed(4)} SOL!`
+    );
   });
 
   it("withdraws organization yields", async () => {
-    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
-    const { poolPda, orgVaultPda } = getPoolPdas(
-      organization.publicKey,
-      speciesIdBytes
-    );
+    const orgBalanceBefore = await fetchBalance(provider, orgVaultPda);
 
-    const tx = await program.methods
+    const txn = await program.methods
       .organizationWithdraw(new BN(ORG_WITHDRAW_AMOUNT * LAMPORTS_PER_SOL))
       .accountsStrict({
         organization: organization.publicKey,
@@ -376,19 +450,25 @@ describe("atharva refi protocol", () => {
       })
       .transaction();
 
-    await provider.sendAndConfirm(tx, [organization]);
+    const signature = await provider.sendAndConfirm(txn, [organization]);
+    logSignature("Organization Withdraw", signature);
 
-    getBalance(provider, "Organization Vault", orgVaultPda);
+    const orgBalanceAfter = await fetchBalance(provider, orgVaultPda);
+
+    logData(`Organization Vault Balance: ${orgBalanceAfter} SOL`);
+    logData(`Withdrawn Amount: ${ORG_WITHDRAW_AMOUNT} SOL`);
+
+    logDone(`Organization withdrew ${ORG_WITHDRAW_AMOUNT} SOL from yields!`);
   });
 
   it("withdraws supporter stake and yields", async () => {
-    const speciesIdBytes = stringToBytes(SPECIES_ID, 32);
-    const { poolPda, poolMintPda, poolVaultPda } = getPoolPdas(
-      organization.publicKey,
-      speciesIdBytes
+    const supporterBalanceBefore = await fetchBalance(
+      provider,
+      supporter.publicKey
     );
+    const poolVaultBalanceBefore = await fetchBalance(provider, poolVaultPda);
 
-    const tx = await program.methods
+    const txn = await program.methods
       .supporterWithdraw(new BN(SUPPORTER_WITHDRAW_AMOUNT * LAMPORTS_PER_SOL))
       .accountsStrict({
         supporter: supporter.publicKey,
@@ -408,9 +488,23 @@ describe("atharva refi protocol", () => {
       })
       .transaction();
 
-    await provider.sendAndConfirm(tx, [supporter]);
+    const signature = await provider.sendAndConfirm(txn, [supporter]);
+    logSignature("Supporter Withdraw", signature);
 
-    getBalance(provider, "Supporter", supporter.publicKey);
-    getBalance(provider, "Pool Vault", poolVaultPda);
+    const supporterBalanceAfter = await fetchBalance(
+      provider,
+      supporter.publicKey
+    );
+    const poolVaultBalanceAfter = await fetchBalance(provider, poolVaultPda);
+
+    logData(`Supporter Balance: ${supporterBalanceAfter} SOL`);
+    logData(`Pool Vault Balance: ${poolVaultBalanceAfter} SOL`);
+    logData(
+      `Received: ${(supporterBalanceAfter - supporterBalanceBefore).toFixed(
+        4
+      )} SOL`
+    );
+
+    logDone(`Supporter withdrew ${SUPPORTER_WITHDRAW_AMOUNT} SOL from pool!`);
   });
 });

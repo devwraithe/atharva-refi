@@ -257,6 +257,7 @@ export const getPoolPdas = (
   return { poolPda, poolMintPda, poolVaultPda, orgVaultPda };
 };
 
+// Fund an account with SOL
 export async function fundAccount(
   connection: anchor.web3.Connection,
   payer: anchor.web3.Keypair,
@@ -272,7 +273,7 @@ export async function fundAccount(
   );
 
   await sendAndConfirmTransaction(connection, transaction, [payer]);
-  console.log(`✅ Transferred ${amountInSol} SOL to ${toPubkey.toBase58()}`);
+  console.log(`[DONE] Sent ${amountInSol} SOL to ${toPubkey.toBase58()}`);
 }
 
 // Show account balance
@@ -281,12 +282,16 @@ export async function getBalance(
   owner: string,
   pubkey: PublicKey
 ) {
-  const supporterBalance = await provider.connection.getBalance(pubkey);
-  console.log(
-    `${owner} Balance: ${supporterBalance} (${
-      supporterBalance / LAMPORTS_PER_SOL
-    })`
-  );
+  const balance = await provider.connection.getBalance(pubkey);
+  console.log(`${owner} Balance: ${balance} (${balance / LAMPORTS_PER_SOL})`);
+}
+
+export async function fetchBalance(
+  provider: anchor.Provider,
+  pubkey: PublicKey
+): Promise<number> {
+  const balance = await provider.connection.getBalance(pubkey);
+  return balance / LAMPORTS_PER_SOL;
 }
 
 // Show token account balance
@@ -306,4 +311,30 @@ export async function getTokenBalance(
   );
 
   return balance.value.uiAmount;
+}
+
+export async function fetchTokenBalance(
+  provider: anchor.Provider,
+  tokenAccount: PublicKey
+): Promise<number> {
+  const balance = await provider.connection.getTokenAccountBalance(
+    tokenAccount
+  );
+  return balance.value.uiAmount;
+}
+
+export function logSignature(label: string, signature: string) {
+  console.log(`\n${label} Txn Signature: ${signature}`);
+}
+
+export function logDone(label: String) {
+  console.log(`[DONE] ${label}`);
+}
+
+export function logData(label: String) {
+  console.log(`[DATA] ${label}`);
+}
+
+export function lamportsToSol(lamports: number): number {
+  return lamports / LAMPORTS_PER_SOL;
 }
