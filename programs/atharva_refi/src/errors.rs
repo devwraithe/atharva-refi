@@ -11,6 +11,8 @@ pub enum ErrorCode {
     UnauthorizedStream,
     #[msg("The provided authority does not match the organization's public key")]
     InvalidOrganizationAuthority,
+    #[msg("Only the organization can withdraw")]
+    UnauthorizedOrganization,
 
     // --- State & Validation Errors ---
     #[msg("Arithmetic overflow")]

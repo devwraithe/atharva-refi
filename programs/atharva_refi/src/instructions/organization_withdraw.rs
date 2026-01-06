@@ -41,6 +41,10 @@ impl<'info> OrganizationWithdraw<'info> {
             self.pool.total_deposits >= amount,
             ErrorCode::InsufficientWithdrawFunds,
         );
+        require!(
+            self.pool.organization_pubkey == self.organization.key(),
+            ErrorCode::UnauthorizedOrganization
+        );
 
         let pool = &self.pool;
 
