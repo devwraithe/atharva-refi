@@ -14,8 +14,6 @@ export const ADMIN_PUBKEY = new PublicKey(
 );
 
 export const walletPath = "./tests/admin_wallet.json";
-export const marinadePath = "tests/marinade";
-export const mblockPath = "tests/magic_block";
 
 // Marinade
 export const MAR_PROGRAM_ID = new PublicKey(
