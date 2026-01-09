@@ -5,15 +5,56 @@ package_manager = "yarn"
 resolution = true
 skip-lint = false
 
+[programs.devnet]
+atharva_refi = "5MQdy7SUtMR5qQqryuizd7WXKE18RRn7sNS4uX64ih96"
+
 [programs.localnet]
-atharva_refi = "HesZ7kke1KynNjhizTAAtRoxQZasxYqJ2oTrdw7JNkBx"
+atharva_refi = "5MQdy7SUtMR5qQqryuizd7WXKE18RRn7sNS4uX64ih96"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "localnet"
+cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 \"tests/**/*.ts\""
+
+[test]
+startup_wait = 15000
+shutdown_wait = 2000
+upgradeable = false
+
+[test.validator]
+bind_address = "0.0.0.0"
+url = "https://api.devnet.solana.com"
+ledger = ".anchor/test-ledger"
+rpc_port = 8899
+
+[[test.validator.clone]]
+address = "MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD"
+
+[[test.validator.clone]]
+address = "8szGkuLTAux9XMgZ2vtY39jVSowEcpBfFfD8hXSEqdGC"
+
+[[test.validator.clone]]
+address = "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So"
+
+[[test.validator.clone]]
+address = "3JLPCS1qM2zRw3Dp6V4hZnYHd4toMNPkNesXdX9tg6KM"
+
+[[test.validator.clone]]
+address = "UefNb6z6yvArqe4cJHTXCqStRsKmWhGxnZzuHbikP5Q"
+
+[[test.validator.clone]]
+address = "7GgPYjS5Dza89wV6FpZ23kUJRG5vbQ1GM25ezspYFSoE"
+
+[[test.validator.clone]]
+address = "8ZUcztoAEhpAeC2ixWewJKQJsSUGYSGPVAjkhDJYf5Gd"
+
+[[test.validator.clone]]
+address = "Du3Ysj1wKbxPKkuPPnvzQLQh8oMSVifs3jGZjJWXFmHN"
+
+[[test.validator.clone]]
+address = "8ZUcztoAEhpAeC2ixWewJKQJsSUGYSGPVAjkhDJYf5Gd"

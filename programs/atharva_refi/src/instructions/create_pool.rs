@@ -1,0 +1,158 @@
+use crate::constants::{
+    ADMIN_PUBKEY, MSOL_MINT, ORG_VAULT_SEED, POOL_MINT_SEED, POOL_SEED, POOL_VAULT_SEED,
+};
+use crate::errors::ErrorCode;
+use crate::events::PoolCreated;
+use crate::states::Pool;
+use anchor_lang::prelude::*;
+use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::token::{Mint, Token, TokenAccount};
+
+/// Creates a conservation pool for a specific species under an organization
+///
+/// Architecture:
+/// - One pool per (organization, species) pair
+/// - Each pool has isolated vault for deposits
+/// - Organization has isolated vault for yield collection
+
+#[derive(Accounts)]
+#[instruction(
+    organization_name: String,
+    organization_pubkey: Pubkey,
+    species_name: String,
+    species_id: [u8; 32],
+)]
+pub struct CreatePool<'info> {
+    #[account(
+        mut,
+        address = ADMIN_PUBKEY @ ErrorCode::CreatePoolUnauthorized
+    )]
+    pub admin: Signer<'info>,
+
+    #[account(address = MSOL_MINT)]
+    pub msol_mint: Account<'info, Mint>,
+
+    #[account(
+        init,
+        payer = admin,
+        space = 8 + Pool::INIT_SPACE,
+        seeds = [
+            POOL_SEED.as_bytes(),
+            organization_pubkey.as_ref(),
+            &species_id,
+        ],
+        bump,
+    )]
+    pub pool: Account<'info, Pool>,
+
+    #[account(
+        init,
+        payer = admin,
+        mint::decimals = 9,
+        mint::authority = pool,
+        mint::token_program = token_program,
+        seeds = [
+            POOL_MINT_SEED.as_bytes(),
+            organization_pubkey.as_ref(),
+            &species_id,
+        ],
+        bump,
+    )]
+    pub pool_mint: Account<'info, Mint>,
+
+    #[account(
+        seeds = [
+            POOL_VAULT_SEED.as_bytes(),
+            organization_pubkey.as_ref(),
+            &species_id
+        ],
+        bump,
+    )]
+    pub pool_vault: SystemAccount<'info>,
+
+    #[account(
+        seeds = [
+            ORG_VAULT_SEED.as_bytes(),
+            organization_pubkey.as_ref(),
+            &species_id
+        ],
+        bump,
+    )]
+    pub organization_vault: SystemAccount<'info>,
+
+    /// mSOL goes here
+    /// Equivalent to Marinade's `mint_to`
+    #[account(
+        init_if_needed,
+        payer = admin,
+        associated_token::mint = msol_mint,
+        associated_token::authority = pool_vault,
+    )]
+    pub pool_msol_account: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
+
+    pub associated_token_program: Program<'info, AssociatedToken>,
+
+    pub system_program: Program<'info, System>,
+}
+impl<'info> CreatePool<'info> {
+    pub fn process(
+        &mut self,
+        organization_name: String,
+        organization_pubkey: Pubkey,
+        species_name: String,
+        species_id: [u8; 32],
+        bumps: &CreatePoolBumps,
+    ) -> Result<()> {
+        // Validation
+        require!(species_id[0] != 0, ErrorCode::InvalidStringLength);
+
+        let pool = &mut self.pool;
+
+        pool.organization_pubkey = organization_pubkey;
+        pool.organization_name = organization_name.clone();
+        pool.organization_yield_bps = 20;
+        pool.species_name = species_name.clone();
+        pool.species_id = bytes_to_string(&species_id);
+        pool.new_species_id = species_id;
+        pool.pool_mint = self.pool_mint.key();
+        pool.vault = self.pool_vault.key();
+
+        pool.is_active = true;
+        pool.is_crank_scheduled = false;
+        pool.total_deposits = 0;
+        pool.total_shares = 0;
+        pool.last_streamed_vault_sol = 0;
+        pool.last_stream_ts = 0;
+
+        pool.pool_bump = bumps.pool;
+        pool.org_vault_bump = bumps.organization_vault;
+        pool.pool_vault_bump = bumps.pool_vault;
+        pool.pool_mint_bump = bumps.pool_mint;
+
+        // Convert to strings for event (events can use String)
+        let species_id_str = bytes_to_string(&species_id);
+
+        emit!(PoolCreated {
+            pool: pool.key(),
+            organization_pubkey,
+            organization_name,
+            species_name,
+            species_id: species_id_str,
+            timestamp: Clock::get()?.unix_timestamp as u64,
+        });
+
+        msg!("Pool created: {}", pool.key());
+        msg!("Pool Vault: {}", self.pool_vault.key());
+        msg!("Pool mSOL Account: {}", self.pool_msol_account.key());
+
+        Ok(())
+    }
+}
+
+// Helper function to convert fixed byte array to String
+fn bytes_to_string(bytes: &[u8]) -> String {
+    let len = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+    String::from_utf8_lossy(&bytes[..len]).to_string()
+}
