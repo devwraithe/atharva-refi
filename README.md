@@ -8,13 +8,13 @@ You can view the User Story document [here](./docs/USER-STORY.md)
 
 ### Architecture Diagrams
 
-#### 1. Scoped
-
-![Atharva ReFi Scoped Architecture](./docs/scoped-v1.png)
+![Atharva ReFi Scoped MVP Architecture](./docs/scoped-mvp.png)
 
 #### 2. Detailed
 
-![Atharva ReFi Detailed Architecture](./docs/detailed-v1.png)
+![Atharva ReFi Detailed Architecture](./docs/create-pool.png)
+![Atharva ReFi Detailed Architecture](./docs/deposit.png)
+![Atharva ReFi Detailed Architecture](./docs/stream.png)
 
 ### Possible Bugs
 
