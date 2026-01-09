@@ -31,6 +31,7 @@ No donations. No intermediaries. No trust required. Just verifiable impact.
 5. Withdraw whenever you want
 
 **Example:** Stake 10 SOL at 6.5% APY
+
 - You keep: 0.52 mSOL/year (80%)
 - Conservation: 0.13 mSOL/year (20%, auto-streamed)
 
@@ -45,44 +46,42 @@ No donations. No intermediaries. No trust required. Just verifiable impact.
 
 ## Key Features
 
-| Feature | What It Means |
-|---------|---------------|
-| **Non-Custodial** | You control your funds, always |
-| **Auto-Streaming** | Conservation funding happens automatically |
-| **Transparent** | Every transaction visible on-chain |
-| **No Lock-ups** | Withdraw anytime, no penalties |
-| **Liquid Staking** | Your SOL earns yield via Marinade |
-| **Verifiable Impact** | Track exactly where your yields go |
+| Feature               | What It Means                              |
+| --------------------- | ------------------------------------------ |
+| **Non-Custodial**     | You control your funds, always             |
+| **Auto-Streaming**    | Conservation funding happens automatically |
+| **Transparent**       | Every transaction visible on-chain         |
+| **No Lock-ups**       | Withdraw anytime, no penalties             |
+| **Liquid Staking**    | Your SOL earns yield via Marinade          |
+| **Verifiable Impact** | Track exactly where your yields go         |
 
 ---
 
 ## Architecture
 
-### System Overview
+### Scoped MVP
+
+An end-to-end view of the Atharva ReFi protocol, showing how supporter SOL deposits flow through staking, yield generation, and automated on-chain distribution to verified conservation organizations.
 
 ![Scoped MVP](./docs/scoped-mvp.png)
 
-*The complete protocol flow—from user deposits to conservation funding*
+### Pool Creation
 
-### Core Flows
-
-**Pool Creation**
+The onboarding and verification flow for conservation organizations, where an admin creates a species-specific pool, initializes program-derived accounts, and links a verified organization treasury to receive yield.
 
 ![Pool Creation](./docs/create-pool.png)
 
-How conservation organizations get onboarded and receive their dedicated species pool.
+### Supporter Deposit
 
-**Supporter Deposits**
+The deposit lifecycle for supporters, illustrating how SOL is deposited into a pool vault, staked via Marinade to generate mSOL, and how LP tokens are minted to represent the supporter’s proportional ownership.
 
-![Supporter Deposits](./docs/deposit.png)
+![Supporter Deposit](./docs/deposit.png)
 
-How supporters stake SOL and receive LP tokens representing their pool ownership.
+### Yield Streaming
 
-**Yield Streaming**
+The automated yield realization and distribution process, where staking rewards are periodically calculated, 20% is streamed on-chain to the organization’s verified wallet, and the remaining 80% accrues to supporters.
 
 ![Yield Streaming](./docs/stream.png)
-
-Automated 20% yield distribution to conservation wallets, 80% remains for supporters.
 
 ---
 
@@ -99,6 +98,7 @@ Automated 20% yield distribution to conservation wallets, 80% remains for suppor
 ## Getting Started
 
 ### Quick Setup
+
 ```bash
 # Clone and install
 git clone https://github.com/yourusername/atharva-refi.git
@@ -113,6 +113,7 @@ anchor test
 ```
 
 ### Local Development
+
 ```bash
 # Start local Solana validator
 solana-test-validator
@@ -127,6 +128,7 @@ anchor test --skip-local-validator
 ---
 
 ## Project Structure
+
 ```
 atharva-refi/
 ├── programs/
@@ -149,11 +151,11 @@ atharva-refi/
 
 ## Documentation
 
-| Resource | Purpose |
-|----------|---------|
-| [User Stories](./docs/user-story.md) | Real-world usage scenarios |
+| Resource                                       | Purpose                    |
+| ---------------------------------------------- | -------------------------- |
+| [User Stories](./docs/user-story.md)           | Real-world usage scenarios |
 | [Letter of Intent](./docs/letter-of-intent.md) | Project vision and mission |
-| [Architecture Diagrams](./docs/) | Technical system design |
+| [Architecture Diagrams](./docs/)               | Technical system design    |
 
 ---
 
@@ -163,12 +165,12 @@ atharva-refi/
 
 ### Known Issues
 
-| Priority | Issue | Mitigation Plan |
-|----------|-------|-----------------|
-| 🔴 Critical | Hardcoded admin pubkey | Moving to multisig config |
-| 🟠 High | Reentrancy protection | Implementing CEI pattern |
-| 🟠 High | Organization wallet validation | Adding withdrawal constraints |
-| 🟡 Medium | Input validation | Adding comprehensive checks |
+| Priority    | Issue                          | Mitigation Plan               |
+| ----------- | ------------------------------ | ----------------------------- |
+| 🔴 Critical | Hardcoded admin pubkey         | Moving to multisig config     |
+| 🟠 High     | Reentrancy protection          | Implementing CEI pattern      |
+| 🟠 High     | Organization wallet validation | Adding withdrawal constraints |
+| 🟡 Medium   | Input validation               | Adding comprehensive checks   |
 
 ---
 
@@ -177,6 +179,7 @@ atharva-refi/
 We welcome contributions from developers, conservationists, and anyone passionate about transparent impact.
 
 ### How to Contribute
+
 ```bash
 1. Fork the repository
 2. Create your feature branch (git checkout -b feature/amazing-feature)
