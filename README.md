@@ -1,68 +1,141 @@
-## Atharva ReFi Protocol
+# Atharva ReFi Protocol
 
 Atharva ReFi Protocol merges conservation with Solana, using Regenerative Finance to make protection of real-world endangered species come alive on the blockchain through transparent, incentivized impact.
 
-### User Story
+**Stake SOL. Earn yields. Fund conservation. All on-chain.**
 
-You can view the User Story document [here](./docs/USER-STORY.md)
+[![Solana](https://img.shields.io/badge/Solana-14F195?style=flat-square&logo=solana&logoColor=black)](https://solana.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
-### Architecture Diagrams
+---
 
-![Atharva ReFi Scoped MVP Architecture](./docs/scoped-mvp.png)
+## What This Does
 
-#### 2. Detailed
+Atharva ReFi lets you stake SOL to earn yields while automatically funding endangered species conservation.
 
-![Atharva ReFi Detailed Architecture](./docs/create-pool.png)
-![Atharva ReFi Detailed Architecture](./docs/deposit.png)
-![Atharva ReFi Detailed Architecture](./docs/stream.png)
+- You stake SOL → Earn mSOL yields via Marinade
+- 80% of yields stay with you
+- 20% auto-streams to verified conservation organizations
+- Withdraw anytime, no lock-ups
+- Everything is on-chain and transparent
 
-### Possible Bugs
+---
 
-- ADMIN_PUBKEY is in code, what if an attacker decides to change it to theirs?
-- Make sure species is lowercase to avoid errors
-- Implement checks for all inputs and avoid duplication
-- Is it not better to update any state before transactions to prevent reentrancy?
-- Make sure orgs can only withdraw to the wallet they submitted during pool creation to prevent fraud.
-- Add validation constraints to accounts e.g: #[account(
-  mut,
-  constraint = pool_msol_account.mint == msol_mint.key() @ ErrorCode::InvalidMsolAccount,
-  constraint = pool_msol_account.owner == pool_vault.key() @ ErrorCode::InvalidMsolAccount,
-  )]
-  pub pool_msol_account: InterfaceAccount<'info, TokenAccount>,
-- Switch to using TokenInterface for marinade accounts (uncertain but worth a shot)
+## How It Works
 
-# Constraints
+**For Supporters:**
+1. Stake SOL in a species pool
+2. Earn mSOL yields (you keep 80%)
+3. 20% automatically goes to conservation
+4. Withdraw principal + yields anytime
 
-- (address = marinade_finance::STATE @ ErrorCode::InvalidMarinadeState),
-- token::mint = msol_mint, token::authority = pool_vault,
+**For Organizations:**
+1. Apply and get verified
+2. Receive continuous yield streams
+3. Fully auditable on-chain
 
-### To Do
+**Example:** Stake 10 SOL at 6.5% APY
+- You earn: 0.52 mSOL/year
+- Conservation gets: 0.13 mSOL/year (automatically)
 
-- Slippage protection
+---
 
-### Possible Useful Notes
+## Documentation
 
-- shares / total_shares = supporter's % ownership
-- supporter's mSOL = total_pool_mSOL \* (shares / total_shares)
+- **[User Stories](./docs/user-story.md)** - See how people use Atharva
+- **[Letter of Intent](./docs/letter-of-intent.md)** - Our mission and vision
+- **[Architecture Diagrams](./docs/)** - Technical design
 
-This automatically includes the 80% yield because:
+---
 
-- Pool's mSOL balance grows over time (staking rewards)
-- 20% is regularly streamed out via `stream_yields`
-- 80% stays in pool, increasing mSOL value
-- Supporters get proportional share of remaining mSOL
+## Architecture
 
-### **2. Withdrawal Flow**
+**System Overview:**
 
+![Scoped MVP](./docs/scoped-mvp.png)
+
+**Detailed Flows:**
+
+![Pool](./docs/create-pool.png) |
+![Deposit](./docs/deposit.png) |
+![Stream](./docs/stream.png) |
+
+**Tech Stack:**
+- Blockchain: Solana
+- Smart Contracts: Anchor (Rust)
+- Liquid Staking: Marinade Finance
+
+---
+
+## Getting Started
+
+### Install
+```bash
+git clone https://github.com/yourusername/atharva-refi.git
+cd atharva-refi
+npm install
 ```
-1. Calculate: shares → mSOL amount
-2. Unstake: mSOL → SOL (via Marinade)
-3. Transfer: SOL → supporter
-4. Burn: share tokens
-5. Update: pool state
+
+### Build & Test
+```bash
+anchor build
+anchor test
 ```
 
-Run - ./dump_marinade.sh - to dump all marinade accounts from mainnet
+### Local Development
+```bash
+solana-test-validator
+anchor deploy
+```
 
-Dump program - solana program dump -u m MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD marinade.so
-Dump account - solana account -u m 8szGkuLTAux9XMgZ2vtY39jVSowEcpBfFfD8hXSEqdGC --output json > marinade_state.json
+---
+
+## Security Status
+
+⚠️ **MVP in Development - Not production-ready**
+
+**Current Issues:**
+- Admin key is hardcoded (moving to multisig)
+- Need reentrancy protection (implementing CEI pattern)
+- Organization wallet validation needed
+- Input validation in progress
+
+**Before Mainnet:**
+- Smart contract audit
+- Multisig admin controls
+- Emergency pause mechanism
+- Bug bounty program
+
+---
+
+## Contributing
+
+1. Fork the repo
+2. Create your branch (`git checkout -b feature/name`)
+3. Commit changes (`git commit -m 'Add feature'`)
+4. Push and open a PR
+
+**Need help with:**
+- Security audits
+- Documentation
+
+---
+
+## Project Structure
+```
+atharva-refi/
+├── programs/atharva-refi/    # Smart contracts
+├── tests/                    # Tests
+├── app/                      # Frontend (coming soon)
+└── docs/                     # Documentation
+```
+
+---
+
+## License
+
+MIT License - see [LICENSE](LICENSE)
+
+---
+
+**Built for endangered species and transparent impact 🌿**
