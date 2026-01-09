@@ -63,25 +63,25 @@ No donations. No intermediaries. No trust required. Just verifiable impact.
 
 An end-to-end view of the Atharva ReFi protocol, showing how supporter SOL deposits flow through staking, yield generation, and automated on-chain distribution to verified conservation organizations.
 
-![Scoped MVP](./docs/scoped-mvp.png)
+![Scoped MVP](./docs/scoped.png)
 
-### Pool Creation
+### Admin Creates Pool For Organization
 
 The onboarding and verification flow for conservation organizations, where an admin creates a species-specific pool, initializes program-derived accounts, and links a verified organization treasury to receive yield.
 
-![Pool Creation](./docs/create-pool.png)
+![Pool Creation](./docs/create-pools.png)
 
-### Supporter Deposit
+### Supporter Deposits And Stakes SOL
 
 The deposit lifecycle for supporters, illustrating how SOL is deposited into a pool vault, staked via Marinade to generate mSOL, and how LP tokens are minted to represent the supporter’s proportional ownership.
 
-![Supporter Deposit](./docs/deposit.png)
+![Supporter Deposit](./docs/deposit-sol.png)
 
-### Yield Streaming
+### Auto-Stream Yields To Organization
 
 The automated yield realization and distribution process, where staking rewards are periodically calculated, 20% is streamed on-chain to the organization’s verified wallet, and the remaining 80% accrues to supporters.
 
-![Yield Streaming](./docs/stream.png)
+![Yield Streaming](./docs/stream-yields.png)
 
 ---
 
